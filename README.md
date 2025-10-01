@@ -28,7 +28,7 @@ module.exports = {
   plugins: [
     ['babel-plugin-jsx-metadata', {
       filename: 'src/Component.js', // Current file being processed
-      skipFiles: ['ImageOptimizer.jsx'] // Optional: files to skip
+      skipFiles: ['SkipMe.jsx'] // Optional: files to skip
     }]
   ]
 };
@@ -100,12 +100,12 @@ The plugin uses PascalCase detection to identify JSX components vs HTML elements
 The current file being processed. Used to set `data-component-file` and `data-rendered-by` attributes.
 
 ### `skipFiles` (string[])
-Array of filenames or patterns to skip processing. Defaults to `['ImageOptimizer.jsx']`.
+Array of filenames or patterns to skip processing. Defaults to `[]`.
 
 ```javascript
 {
   filename: 'src/components/Button.tsx',
-  skipFiles: ['ImageOptimizer.jsx', 'generated-components.js']
+  skipFiles: ['generated-components.js']
 }
 ```
 

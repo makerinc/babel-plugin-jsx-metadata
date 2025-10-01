@@ -40,12 +40,17 @@ function getComponentName(path: NodePath): string | null {
   return null;
 }
 
+export type options = {
+  filename?: string;
+  skipFiles?: string[];
+};
+
 function componentDataPlugin(
   _api: ConfigAPI,
-  options: { filename?: string; skipFiles?: string[] } = {},
+  options: options = {},
 ): PluginObj {
   const filename = options.filename || "";
-  const skipFiles = options.skipFiles || ["ImageOptimizer.jsx"];
+  const skipFiles = options.skipFiles || [];
 
   // Skip adding metadata to virtual/generated files
   if (

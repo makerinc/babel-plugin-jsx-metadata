@@ -4,8 +4,8 @@ import { transform } from "./test-helpers";
 import babelPluginDomEditor from "../src/index";
 
 // Test fixtures
-const imageOptimizerInput = `function ImageOptimizer() {
-  return <div>Optimizer</div>;
+const skipComponentInput = `function SkipComponent() {
+  return <div>Skip This</div>;
 }`;
 
 const basicFunctionInput = `function Button() {
@@ -17,8 +17,10 @@ const existingDataFileInput = `function Existing() {
 }`;
 
 describe("Edge Cases", () => {
-  test("should skip ImageOptimizer files by default", () => {
-    const output = transform(imageOptimizerInput, "ImageOptimizer.jsx");
+  test("should skip SkipComponent files by default", () => {
+    const output = transform(skipComponentInput, "SkipComponent.jsx", {
+      skipFiles: ["SkipComponent.jsx"],
+    });
 
     // Should not add any data attributes
     expect(output).not.toContain("data-component-file");

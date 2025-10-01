@@ -1,12 +1,16 @@
 import { transformSync } from "@babel/core";
 import { writeFileSync } from "fs";
 import { join } from "path";
-import babelPluginDomEditor from "../src/index";
+import plugin, { type options } from "../src/index";
 
 // Helper function to transform code with the plugin
-export function transform(code: string, filename = "test.js") {
+export function transform(
+  code: string,
+  filename = "test.js",
+  options: options = {},
+) {
   const result = transformSync(code, {
-    plugins: [[babelPluginDomEditor, { filename }]],
+    plugins: [[plugin, { ...options, filename }]],
     parserOpts: {
       plugins: ["jsx", "typescript"],
     },

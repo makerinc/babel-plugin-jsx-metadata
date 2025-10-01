@@ -1,0 +1,45 @@
+{
+  "name": "babel-plugin-dom-editor",
+  "version": "1.0.0",
+  "description": "Babel plugin that adds DOM metadata for visual editing functionality",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "dev": "vitest --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "babel",
+    "plugin",
+    "react",
+    "jsx",
+    "visual-editor",
+    "dom",
+    "metadata"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@babel/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-react": "^7.23.0",
+    "@babel/preset-typescript": "^7.23.0",
+    "@babel/types": "^7.23.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

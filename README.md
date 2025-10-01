@@ -47,7 +47,7 @@ The plugin identifies React component return values by traversing:
 For each component, the plugin:
 
 1. **Adds component metadata** to root elements:
-   - `data-component-file`: Source file path  
+   - `data-component-file`: Source file path
    - `data-component-name`: Component name (e.g., "Button", "Hero")
    - `data-component-line`: Source line number
 
@@ -64,7 +64,7 @@ The plugin wraps text content in components to enable selection:
 // Before
 <div>Hello World</div>
 
-// After  
+// After
 <div data-component-file="src/Component.js" data-component-name="Component" data-component-line="5">
   <span style={{display: 'contents'}} data-rendered-by="src/Component.js" data-component-line="5">
     Hello World
@@ -89,7 +89,7 @@ The plugin uses PascalCase detection to identify React components vs HTML elemen
 
 - **React Components** (PascalCase): `Button`, `Header`, `Card`
   - Skip adding `data-rendered-by` (they have their own component metadata)
-  
+
 - **HTML Elements** (lowercase): `div`, `button`, `span`
   - Add `data-rendered-by` pointing to the file that authored them
   - Add `data-component-line` with source line number
@@ -126,9 +126,9 @@ The plugin transforms it to:
 ```jsx
 const Button = ({ children, variant }) => {
   return (
-    <button 
+    <button
       className={`btn btn-${variant}`}
-      data-component-file="src/Button.js" 
+      data-component-file="src/Button.js"
       data-component-name="Button"
       data-component-line="3"
     >
@@ -173,7 +173,7 @@ The injected metadata enables:
 
 ```typescript
 function componentDataPlugin(
-  api: ConfigAPI, 
+  api: ConfigAPI,
   options: { filename?: string; skipFiles?: string[] }
 ): PluginObj
 ```
@@ -192,7 +192,7 @@ Adds component metadata to JSX elements.
 ## Limitations
 
 1. Only processes direct JSX returns from components
-2. PascalCase detection may miss edge cases  
+2. PascalCase detection may miss edge cases
 3. Adds spans that could affect styling (mitigated with `display: contents`)
 4. Line numbers depend on source maps for accuracy in complex build setups
 5. Cross-component text authorship requires careful `{children}` handling

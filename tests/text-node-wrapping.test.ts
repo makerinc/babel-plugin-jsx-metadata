@@ -19,14 +19,26 @@ const whitespaceTextInput = `function Layout() {
   );
 }`;
 
+const reactComponentTextInput = `function App() {
+  return (
+    <div>
+      <MyButton>Click me</MyButton>
+      <AnotherComponent>Some text</AnotherComponent>
+    </div>
+  );
+}`;
+
 describe("Text Node Wrapping", () => {
-  test("should wrap direct text content in component", () => {
+  test("should NOT wrap text inside HTML elements", () => {
     const output = transform(directTextInput, "src/Heading.js");
 
-    // Text should be wrapped in span with data-rendered-by
-    expect(output).toContain("<span style={{");
-    expect(output).toContain("data-rendered-by=");
+    // Text inside HTML elements should NOT be wrapped (corrected behavior)
+    expect(output).not.toContain("<span style={{");
     expect(output).toContain("Welcome to our site");
+    
+    // The h1 is the root element, so it gets component metadata not data-rendered-by
+    expect(output).toContain('data-component-file="src/Heading.js"');
+    expect(output).toContain('data-component-name="Heading"');
   });
 
   test("should NOT wrap {children} expression to preserve authorship", () => {
@@ -41,11 +53,28 @@ describe("Text Node Wrapping", () => {
     expect(output).toContain("data-component-name=\"Button\"");
   });
 
-  test("should not wrap whitespace-only text nodes", () => {
+  test("should not wrap text inside HTML elements", () => {
     const output = transform(whitespaceTextInput, "src/Layout.js");
 
-    // Should have spans for "Header" and "Main" but not for whitespace
+    // HTML elements should NOT have span wrappers (corrected behavior)
     const spanCount = (output.match(/<span/g) || []).length;
-    expect(spanCount).toBe(2); // Only for "Header" and "Main" text
+    expect(spanCount).toBe(0); // No spans for HTML element text
+    
+    // But should have data-rendered-by on the HTML elements
+    expect(output).toContain('data-rendered-by="src/Layout.js"');
+  });
+
+  test("should wrap text passed TO React components", () => {
+    const output = transform(reactComponentTextInput, "src/App.js");
+
+    // Text passed to React components SHOULD be wrapped in spans
+    const spanCount = (output.match(/<span/g) || []).length;
+    expect(spanCount).toBe(2); // One for each React component text
+
+    // Should wrap "Click me" and "Some text"
+    expect(output).toContain("<span style={{");
+    expect(output).toContain("Click me");
+    expect(output).toContain("Some text");
+    expect(output).toContain('data-rendered-by="src/App.js"');
   });
 });

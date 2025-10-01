@@ -107,7 +107,7 @@ function processComponent(
       // Direct return: const Button = () => <jsx>
       if (t.isJSXElement(func.body)) {
         addEditorMetadata(func.body, filename, componentName, true);
-        processJSXChildren(func.body, filename, true);
+        processJSXChildren(func.body, filename, false); // Root element: no text wrapping
       } else if (t.isJSXFragment(func.body)) {
         addEditorMetadataToFragmentChildren(func.body, filename, componentName);
         addRenderedByToFragmentChildren(func.body, filename);
@@ -115,7 +115,7 @@ function processComponent(
         const jsxElement = convertCreateElementToJSX(func.body);
         if (jsxElement) {
           addEditorMetadata(jsxElement, filename, componentName, true);
-          processJSXChildren(jsxElement, filename, true);
+          processJSXChildren(jsxElement, filename, false); // Root element: no text wrapping
           func.body = jsxElement;
         }
       }
@@ -148,7 +148,7 @@ function processComponentReturn(
 
   if (t.isJSXElement(argument)) {
     addEditorMetadata(argument, filename, componentName, true);
-    processJSXChildren(argument, filename, true);
+    processJSXChildren(argument, filename, false); // Root element: no text wrapping
   } else if (t.isJSXFragment(argument)) {
     addEditorMetadataToFragmentChildren(argument, filename, componentName);
     addRenderedByToFragmentChildren(argument, filename);
@@ -156,7 +156,7 @@ function processComponentReturn(
     const jsxElement = convertCreateElementToJSX(argument);
     if (jsxElement) {
       addEditorMetadata(jsxElement, filename, componentName, true);
-      processJSXChildren(jsxElement, filename, true);
+      processJSXChildren(jsxElement, filename, false); // Root element: no text wrapping
       returnPath.node.argument = jsxElement;
     }
   }
@@ -245,6 +245,7 @@ function processJSXChildren(
   jsxElement.children.forEach((child) => {
     if (t.isJSXElement(child)) {
       if (!isReactComponent(child)) {
+        // HTML elements: just add data-rendered-by attribute, no text wrapping
         const lineNumber = child.loc?.start.line;
         child.openingElement.attributes.push(
           t.jsxAttribute(
@@ -261,11 +262,15 @@ function processJSXChildren(
           );
         }
         processJSXChildren(child, filename, false);
+      } else {
+        // React components: process their children with text wrapping enabled
+        processJSXChildren(child, filename, true);
       }
       processedChildren.push(child);
     } else if (t.isJSXText(child)) {
       const textContent = child.value.trim();
-      if (textContent) {
+      if (textContent && wrapExpressions) {
+        // Only wrap text when we're inside a React component (wrapExpressions = true)
         const lineNumber = child.loc?.start.line;
         const attributes = [
           t.jsxAttribute(

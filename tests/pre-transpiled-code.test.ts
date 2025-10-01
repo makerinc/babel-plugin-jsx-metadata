@@ -17,8 +17,11 @@ describe("Pre-transpiled Code", () => {
     expect(buttonAttrs["data-component-file"]).toBe("src/Button.js");
     expect(buttonAttrs["data-component-name"]).toBe("Button");
 
-    // Should wrap text content
-    expect(output).toContain("<span style={{");
-    expect(output).toContain("data-rendered-by");
+    // Should NOT wrap text content inside HTML elements (corrected behavior)
+    expect(output).not.toContain("<span style={{");
+    
+    // Text should remain unwrapped
+    expect(output).toContain("Click me");
+    expect(output).not.toContain("data-rendered-by");
   });
 });

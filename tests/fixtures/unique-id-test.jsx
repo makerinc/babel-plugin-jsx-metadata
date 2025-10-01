@@ -1,1 +1,0 @@
-const Hero = () => <section>Hero content</section>;

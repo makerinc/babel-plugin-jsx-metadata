@@ -1,1 +1,0 @@
-const Card = () => <div className="card">Content</div>;

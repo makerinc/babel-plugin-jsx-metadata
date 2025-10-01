@@ -1,1 +1,0 @@
-const Component = () => <div>Test</div>;

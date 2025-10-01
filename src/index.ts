@@ -142,7 +142,7 @@ function addRenderedByToChildren(
       processedChildren.push(child);
     } else if (t.isJSXText(child)) {
       const textContent = child.value.trim();
-      if (textContent && isComponentRoot) {
+      if (textContent) {
         const wrappedTextElement = t.jsxElement(
           t.jsxOpeningElement(t.jsxIdentifier('span'), [
             t.jsxAttribute(

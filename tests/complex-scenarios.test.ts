@@ -83,7 +83,7 @@ describe("Complex Real-World Scenarios", () => {
     // This is the issue we need to fix - Button should get Button's ID
     const buttonAttrs = getAttributes(output, "button");
     expect(buttonAttrs["data-file"]).toBe("src/Hero.js");
-    expect(buttonAttrs["data-editor-id"]).toBe(heroId); // Currently same ID
+    expect(buttonAttrs["data-editor-id"]).toMatch(/^button_/); // Currently same ID
 
     // The text "Get Started Today" should be wrapped in a span
     // with Hero's editor-id in data-rendered-by (Hero authored this text)

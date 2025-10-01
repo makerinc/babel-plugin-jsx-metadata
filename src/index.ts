@@ -32,11 +32,25 @@ function filenameToSnakeCase(filename: string): string {
     .toLowerCase();
 }
 
-function generateUniqueId(filename: string): string {
-  const prefix = filenameToSnakeCase(filename);
+function generateUniqueId(componentName: string): string {
+  const prefix = filenameToSnakeCase(componentName);
   const timestamp = Date.now().toString(36);
   const randomPart = Math.random().toString(36).substring(2, 8);
   return `${prefix}_${timestamp}_${randomPart}`;
+}
+
+function getComponentName(path: any): string | null {
+  // For function declarations: function Button() {}
+  if (path.isFunctionDeclaration() && path.node.id) {
+    return path.node.id.name;
+  }
+  
+  // For variable declarations with arrow functions: const Button = () => {}
+  if (path.isVariableDeclarator() && path.node.id && t.isIdentifier(path.node.id)) {
+    return path.node.id.name;
+  }
+  
+  return null;
 }
 
 function componentDataPlugin(
@@ -61,61 +75,94 @@ function componentDataPlugin(
   return {
     name: "babel-plugin-dom-editor",
     visitor: {
-      Program(path) {
-        const componentId = generateUniqueId(filename);
-
-        path.traverse({
-          ReturnStatement(returnPath) {
-            const argument = returnPath.node.argument;
-            if (t.isJSXElement(argument)) {
-              addEditorMetadata(argument, filename, componentId, true);
-              processJSXChildren(argument, componentId, true);
-            } else if (t.isJSXFragment(argument)) {
-              addEditorMetadataToFragmentChildren(
-                argument,
-                filename,
-                componentId,
-              );
-              addRenderedByToFragmentChildren(argument, componentId);
-            } else if (t.isCallExpression(argument)) {
-              const jsxElement = convertCreateElementToJSX(argument);
-              if (jsxElement) {
-                addEditorMetadata(jsxElement, filename, componentId, true);
-                processJSXChildren(jsxElement, componentId, true);
-                returnPath.node.argument = jsxElement;
-              }
-            }
-          },
-
-          ArrowFunctionExpression(arrowPath) {
-            if (t.isJSXElement(arrowPath.node.body)) {
-              addEditorMetadata(
-                arrowPath.node.body,
-                filename,
-                componentId,
-                true,
-              );
-              processJSXChildren(arrowPath.node.body, componentId, true);
-            } else if (t.isJSXFragment(arrowPath.node.body)) {
-              addEditorMetadataToFragmentChildren(
-                arrowPath.node.body,
-                filename,
-                componentId,
-              );
-              addRenderedByToFragmentChildren(arrowPath.node.body, componentId);
-            } else if (t.isCallExpression(arrowPath.node.body)) {
-              const jsxElement = convertCreateElementToJSX(arrowPath.node.body);
-              if (jsxElement) {
-                addEditorMetadata(jsxElement, filename, componentId, true);
-                processJSXChildren(jsxElement, componentId, true);
-                arrowPath.node.body = jsxElement;
-              }
-            }
-          },
-        });
+      // Handle function declarations: function Button() {}
+      FunctionDeclaration(path) {
+        const componentName = getComponentName(path);
+        if (componentName) {
+          processComponent(path, componentName, filename);
+        }
+      },
+      
+      // Handle variable declarations with arrow functions: const Button = () => {}
+      VariableDeclarator(path) {
+        const componentName = getComponentName(path);
+        if (componentName && (t.isArrowFunctionExpression(path.node.init) || t.isFunctionExpression(path.node.init))) {
+          processComponent(path, componentName, filename);
+        }
       },
     },
   };
+}
+
+function processComponent(path: any, componentName: string, filename: string): void {
+  const componentId = generateUniqueId(componentName);
+  
+  // Handle function declarations: function Button() { return <jsx> }
+  if (path.isFunctionDeclaration()) {
+    path.traverse({
+      ReturnStatement(returnPath: any) {
+        processComponentReturn(returnPath, filename, componentId);
+      }
+    });
+  }
+  
+  // Handle arrow functions: const Button = () => <jsx> or const Button = () => { return <jsx> }
+  if (path.isVariableDeclarator() && path.node.init) {
+    const func = path.node.init;
+    
+    if (t.isArrowFunctionExpression(func)) {
+      // Direct return: const Button = () => <jsx>
+      if (t.isJSXElement(func.body)) {
+        addEditorMetadata(func.body, filename, componentId, true);
+        processJSXChildren(func.body, componentId, true);
+      } else if (t.isJSXFragment(func.body)) {
+        addEditorMetadataToFragmentChildren(func.body, filename, componentId);
+        addRenderedByToFragmentChildren(func.body, componentId);
+      } else if (t.isCallExpression(func.body)) {
+        const jsxElement = convertCreateElementToJSX(func.body);
+        if (jsxElement) {
+          addEditorMetadata(jsxElement, filename, componentId, true);
+          processJSXChildren(jsxElement, componentId, true);
+          func.body = jsxElement;
+        }
+      }
+      // Block body: const Button = () => { return <jsx> }
+      else if (t.isBlockStatement(func.body)) {
+        path.traverse({
+          ReturnStatement(returnPath: any) {
+            processComponentReturn(returnPath, filename, componentId);
+          }
+        });
+      }
+    }
+    
+    if (t.isFunctionExpression(func)) {
+      path.traverse({
+        ReturnStatement(returnPath: any) {
+          processComponentReturn(returnPath, filename, componentId);
+        }
+      });
+    }
+  }
+}
+
+function processComponentReturn(returnPath: any, filename: string, componentId: string): void {
+  const argument = returnPath.node.argument;
+  
+  if (t.isJSXElement(argument)) {
+    addEditorMetadata(argument, filename, componentId, true);
+    processJSXChildren(argument, componentId, true);
+  } else if (t.isJSXFragment(argument)) {
+    addEditorMetadataToFragmentChildren(argument, filename, componentId);
+    addRenderedByToFragmentChildren(argument, componentId);
+  } else if (t.isCallExpression(argument)) {
+    const jsxElement = convertCreateElementToJSX(argument);
+    if (jsxElement) {
+      addEditorMetadata(jsxElement, filename, componentId, true);
+      processJSXChildren(jsxElement, componentId, true);
+      returnPath.node.argument = jsxElement;
+    }
+  }
 }
 
 function addEditorMetadata(

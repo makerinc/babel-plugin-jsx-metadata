@@ -78,7 +78,7 @@ describe("Complex Real-World Scenarios", () => {
     expect(heroAttrs["data-component-file"]).toBe("src/Hero.js");
     expect(heroAttrs["data-component-name"]).toBe("Hero");
 
-    // Button component should have proper attributes  
+    // Button component should have proper attributes
     const buttonAttrs = getAttributes(output, "button");
     expect(buttonAttrs["data-component-file"]).toBe("src/Hero.js");
     expect(buttonAttrs["data-component-name"]).toBe("Button");
@@ -89,6 +89,6 @@ describe("Complex Real-World Scenarios", () => {
     expect(output).toContain(`data-rendered-by="src/Hero.js"`);
 
     // Should have spans for text wrapping
-    expect(output).toContain("<span style={{");
+    expect(output).toContain('<span data-rendered-by="src/Hero.js"');
   });
 });

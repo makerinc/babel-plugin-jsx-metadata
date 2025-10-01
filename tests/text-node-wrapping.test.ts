@@ -35,7 +35,7 @@ describe("Text Node Wrapping", () => {
     // Text inside HTML elements should NOT be wrapped (corrected behavior)
     expect(output).not.toContain("<span style={{");
     expect(output).toContain("Welcome to our site");
-    
+
     // The h1 is the root element, so it gets component metadata not data-rendered-by
     expect(output).toContain('data-component-file="src/Heading.js"');
     expect(output).toContain('data-component-name="Heading"');
@@ -46,11 +46,11 @@ describe("Text Node Wrapping", () => {
 
     // {children} should NOT be wrapped to preserve authorship across components
     expect(output).toContain("{children}");
-    expect(output).not.toContain("data-rendered-by=\"button_");
-    
+    expect(output).not.toContain('data-rendered-by="button_');
+
     // Button should still get component metadata
-    expect(output).toContain("data-component-file=\"src/Button.js\"");
-    expect(output).toContain("data-component-name=\"Button\"");
+    expect(output).toContain('data-component-file="src/Button.js"');
+    expect(output).toContain('data-component-name="Button"');
   });
 
   test("should not wrap text inside HTML elements", () => {
@@ -59,7 +59,7 @@ describe("Text Node Wrapping", () => {
     // HTML elements should NOT have span wrappers (corrected behavior)
     const spanCount = (output.match(/<span/g) || []).length;
     expect(spanCount).toBe(0); // No spans for HTML element text
-    
+
     // But should have data-rendered-by on the HTML elements
     expect(output).toContain('data-rendered-by="src/Layout.js"');
   });
@@ -72,7 +72,7 @@ describe("Text Node Wrapping", () => {
     expect(spanCount).toBe(2); // One for each React component text
 
     // Should wrap "Click me" and "Some text"
-    expect(output).toContain("<span style={{");
+    expect(output).toContain('<span data-rendered-by="src/App.js"');
     expect(output).toContain("Click me");
     expect(output).toContain("Some text");
     expect(output).toContain('data-rendered-by="src/App.js"');

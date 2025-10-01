@@ -180,10 +180,13 @@ function addEditorMetadata(
 
   if (!hasDataFile) {
     const lineNumber = jsxElement.loc?.start.line;
-    
+
     if (isRoot) {
       openingElement.attributes.push(
-        t.jsxAttribute(t.jsxIdentifier("data-component-file"), t.stringLiteral(filename)),
+        t.jsxAttribute(
+          t.jsxIdentifier("data-component-file"),
+          t.stringLiteral(filename),
+        ),
       );
       openingElement.attributes.push(
         t.jsxAttribute(
@@ -274,22 +277,11 @@ function processJSXChildren(
         const lineNumber = child.loc?.start.line;
         const attributes = [
           t.jsxAttribute(
-            t.jsxIdentifier("style"),
-            t.jsxExpressionContainer(
-              t.objectExpression([
-                t.objectProperty(
-                  t.stringLiteral("display"),
-                  t.stringLiteral("contents"),
-                ),
-              ]),
-            ),
-          ),
-          t.jsxAttribute(
             t.jsxIdentifier("data-rendered-by"),
             t.stringLiteral(filename),
           ),
         ];
-        
+
         if (lineNumber) {
           attributes.push(
             t.jsxAttribute(
@@ -298,7 +290,7 @@ function processJSXChildren(
             ),
           );
         }
-        
+
         const wrappedTextElement = t.jsxElement(
           t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),
           t.jsxClosingElement(t.jsxIdentifier("span")),
@@ -320,22 +312,11 @@ function processJSXChildren(
         const lineNumber = child.loc?.start.line;
         const attributes = [
           t.jsxAttribute(
-            t.jsxIdentifier("style"),
-            t.jsxExpressionContainer(
-              t.objectExpression([
-                t.objectProperty(
-                  t.stringLiteral("display"),
-                  t.stringLiteral("contents"),
-                ),
-              ]),
-            ),
-          ),
-          t.jsxAttribute(
             t.jsxIdentifier("data-rendered-by"),
             t.stringLiteral(filename),
           ),
         ];
-        
+
         if (lineNumber) {
           attributes.push(
             t.jsxAttribute(
@@ -344,7 +325,7 @@ function processJSXChildren(
             ),
           );
         }
-        
+
         const wrappedExpressionElement = t.jsxElement(
           t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),
           t.jsxClosingElement(t.jsxIdentifier("span")),

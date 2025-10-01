@@ -14,7 +14,6 @@ const nestedComponentsInput = `function Card() {
   );
 }`;
 
-
 describe("Nested Component Scenarios", () => {
   test("should handle nested components with proper ownership", () => {
     const output = transform(nestedComponentsInput, "src/Card.js");
@@ -33,6 +32,6 @@ describe("Nested Component Scenarios", () => {
 
     // Text in p tag should be wrapped
     expect(output).toContain("Card content goes here");
-    expect(output).toContain("<span style={{");
+    expect(output).toContain(`<span data-rendered-by="${filename}"`);
   });
 });

@@ -30,18 +30,18 @@ describe("HTML Element Ownership", () => {
   test("should add data-rendered-by to HTML elements inside components", () => {
     const output = transform(nestedHtmlElementsInput, "src/Container.js");
 
-    // Root div should have data-file and data-editor-id
+    // Root div should have component metadata
     const rootDivAttrs = getAttributes(output, "div");
-    expect(rootDivAttrs["data-file"]).toBe("src/Container.js");
-    expect(rootDivAttrs["data-editor-id"]).toMatch(/^container_/);
+    expect(rootDivAttrs["data-component-file"]).toBe("src/Container.js");
+    expect(rootDivAttrs["data-component-name"]).toBe("Container");
 
-    // Child HTML elements should have data-rendered-by pointing to container
-    const componentId = rootDivAttrs["data-editor-id"];
+    // Child HTML elements should have data-rendered-by pointing to file
+    const filename = "src/Container.js";
 
-    expect(output).toContain(`<header data-rendered-by="${componentId}"`);
-    expect(output).toContain(`<h1 data-rendered-by="${componentId}"`);
-    expect(output).toContain(`<main data-rendered-by="${componentId}"`);
-    expect(output).toContain(`<p data-rendered-by="${componentId}"`);
+    expect(output).toContain(`<header data-rendered-by="${filename}"`);
+    expect(output).toContain(`<h1 data-rendered-by="${filename}"`);
+    expect(output).toContain(`<main data-rendered-by="${filename}"`);
+    expect(output).toContain(`<p data-rendered-by="${filename}"`);
   });
 
   test("should not add data-rendered-by to React components (PascalCase)", () => {
@@ -51,9 +51,8 @@ describe("HTML Element Ownership", () => {
     expect(output).not.toContain("<Header data-rendered-by");
     expect(output).not.toContain("<Button data-rendered-by");
 
-    // But HTML elements should have data-rendered-by
-    const rootDivAttrs = getAttributes(output, "div");
-    const componentId = rootDivAttrs["data-editor-id"];
-    expect(output).toContain(`<main data-rendered-by="${componentId}"`);
+    // But HTML elements should have data-rendered-by pointing to file
+    const filename = "src/App.js";
+    expect(output).toContain(`<main data-rendered-by="${filename}"`);
   });
 });

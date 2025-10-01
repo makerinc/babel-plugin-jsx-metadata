@@ -12,10 +12,10 @@ describe("Pre-transpiled Code", () => {
   test("should handle React.createElement syntax", () => {
     const output = transform(reactCreateElementInput, "src/Button.js");
 
-    // Should add metadata to button element
+    // Should add component metadata to button element
     const buttonAttrs = getAttributes(output, "button");
-    expect(buttonAttrs["data-file"]).toBe("src/Button.js");
-    expect(buttonAttrs["data-editor-id"]).toMatch(/^button_/);
+    expect(buttonAttrs["data-component-file"]).toBe("src/Button.js");
+    expect(buttonAttrs["data-component-name"]).toBe("Button");
 
     // Should wrap text content
     expect(output).toContain("<span style={{");

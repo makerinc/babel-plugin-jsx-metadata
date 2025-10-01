@@ -20,26 +20,7 @@ type JSXChild =
   | JSXFragment
   | JSXSpreadChild;
 
-function filenameToSnakeCase(filename: string): string {
-  const basename = filename.split("/").pop() || filename;
-
-  const lastDotIndex = basename.lastIndexOf(".");
-  const nameWithoutExt =
-    lastDotIndex > 0 ? basename.substring(0, lastDotIndex) : basename;
-
-  return nameWithoutExt
-    .replace(/[^a-zA-Z0-9]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "")
-    .toLowerCase();
-}
-
-function generateUniqueId(componentName: string): string {
-  const prefix = filenameToSnakeCase(componentName);
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 8);
-  return `${prefix}_${timestamp}_${randomPart}`;
-}
+// Removed unused ID generation functions since we're using file paths now
 
 function getComponentName(path: NodePath): string | null {
   // For function declarations: function Button() {}
@@ -109,13 +90,11 @@ function processComponent(
   componentName: string,
   filename: string,
 ): void {
-  const componentId = generateUniqueId(componentName);
-
   // Handle function declarations: function Button() { return <jsx> }
   if (path.isFunctionDeclaration()) {
     path.traverse({
       ReturnStatement(returnPath: NodePath<ReturnStatement>) {
-        processComponentReturn(returnPath, filename, componentId);
+        processComponentReturn(returnPath, filename, componentName);
       },
     });
   }
@@ -127,16 +106,16 @@ function processComponent(
     if (t.isArrowFunctionExpression(func)) {
       // Direct return: const Button = () => <jsx>
       if (t.isJSXElement(func.body)) {
-        addEditorMetadata(func.body, filename, componentId, true);
-        processJSXChildren(func.body, componentId, true);
+        addEditorMetadata(func.body, filename, componentName, true);
+        processJSXChildren(func.body, filename, true);
       } else if (t.isJSXFragment(func.body)) {
-        addEditorMetadataToFragmentChildren(func.body, filename, componentId);
-        addRenderedByToFragmentChildren(func.body, componentId);
+        addEditorMetadataToFragmentChildren(func.body, filename, componentName);
+        addRenderedByToFragmentChildren(func.body, filename);
       } else if (t.isCallExpression(func.body)) {
         const jsxElement = convertCreateElementToJSX(func.body);
         if (jsxElement) {
-          addEditorMetadata(jsxElement, filename, componentId, true);
-          processJSXChildren(jsxElement, componentId, true);
+          addEditorMetadata(jsxElement, filename, componentName, true);
+          processJSXChildren(jsxElement, filename, true);
           func.body = jsxElement;
         }
       }
@@ -144,7 +123,7 @@ function processComponent(
       else if (t.isBlockStatement(func.body)) {
         path.traverse({
           ReturnStatement(returnPath: NodePath<ReturnStatement>) {
-            processComponentReturn(returnPath, filename, componentId);
+            processComponentReturn(returnPath, filename, componentName);
           },
         });
       }
@@ -153,7 +132,7 @@ function processComponent(
     if (t.isFunctionExpression(func)) {
       path.traverse({
         ReturnStatement(returnPath: NodePath<ReturnStatement>) {
-          processComponentReturn(returnPath, filename, componentId);
+          processComponentReturn(returnPath, filename, componentName);
         },
       });
     }
@@ -163,21 +142,21 @@ function processComponent(
 function processComponentReturn(
   returnPath: NodePath<ReturnStatement>,
   filename: string,
-  componentId: string,
+  componentName: string,
 ): void {
   const argument = returnPath.node.argument;
 
   if (t.isJSXElement(argument)) {
-    addEditorMetadata(argument, filename, componentId, true);
-    processJSXChildren(argument, componentId, true);
+    addEditorMetadata(argument, filename, componentName, true);
+    processJSXChildren(argument, filename, true);
   } else if (t.isJSXFragment(argument)) {
-    addEditorMetadataToFragmentChildren(argument, filename, componentId);
-    addRenderedByToFragmentChildren(argument, componentId);
+    addEditorMetadataToFragmentChildren(argument, filename, componentName);
+    addRenderedByToFragmentChildren(argument, filename);
   } else if (t.isCallExpression(argument)) {
     const jsxElement = convertCreateElementToJSX(argument);
     if (jsxElement) {
-      addEditorMetadata(jsxElement, filename, componentId, true);
-      processJSXChildren(jsxElement, componentId, true);
+      addEditorMetadata(jsxElement, filename, componentName, true);
+      processJSXChildren(jsxElement, filename, true);
       returnPath.node.argument = jsxElement;
     }
   }
@@ -186,7 +165,7 @@ function processComponentReturn(
 function addEditorMetadata(
   jsxElement: JSXElement,
   filename: string,
-  editorId: string,
+  componentName: string,
   isRoot = false,
 ): void {
   if (!filename) return;
@@ -196,27 +175,45 @@ function addEditorMetadata(
     (attr): attr is JSXAttribute =>
       t.isJSXAttribute(attr) &&
       t.isJSXIdentifier(attr.name) &&
-      attr.name.name === "data-file",
+      attr.name.name === "data-component-file",
   );
 
   if (!hasDataFile) {
+    const lineNumber = jsxElement.loc?.start.line;
+    
     if (isRoot) {
       openingElement.attributes.push(
-        t.jsxAttribute(t.jsxIdentifier("data-file"), t.stringLiteral(filename)),
+        t.jsxAttribute(t.jsxIdentifier("data-component-file"), t.stringLiteral(filename)),
       );
       openingElement.attributes.push(
         t.jsxAttribute(
-          t.jsxIdentifier("data-editor-id"),
-          t.stringLiteral(editorId),
+          t.jsxIdentifier("data-component-name"),
+          t.stringLiteral(componentName),
         ),
       );
+      if (lineNumber) {
+        openingElement.attributes.push(
+          t.jsxAttribute(
+            t.jsxIdentifier("data-component-line"),
+            t.stringLiteral(lineNumber.toString()),
+          ),
+        );
+      }
     } else {
       openingElement.attributes.push(
         t.jsxAttribute(
           t.jsxIdentifier("data-rendered-by"),
-          t.stringLiteral(editorId),
+          t.stringLiteral(filename),
         ),
       );
+      if (lineNumber) {
+        openingElement.attributes.push(
+          t.jsxAttribute(
+            t.jsxIdentifier("data-component-line"),
+            t.stringLiteral(lineNumber.toString()),
+          ),
+        );
+      }
     }
   }
 }
@@ -224,20 +221,20 @@ function addEditorMetadata(
 function addEditorMetadataToFragmentChildren(
   jsxFragment: JSXFragment,
   filename: string,
-  editorId: string,
+  componentName: string,
 ): void {
   if (!filename || !jsxFragment.children) return;
 
   jsxFragment.children.forEach((child) => {
     if (t.isJSXElement(child)) {
-      addEditorMetadata(child, filename, editorId, true);
+      addEditorMetadata(child, filename, componentName, true);
     }
   });
 }
 
 function processJSXChildren(
   jsxElement: JSXElement,
-  componentId: string,
+  filename: string,
   wrapExpressions = false,
 ): void {
   if (!jsxElement.children) return;
@@ -248,36 +245,57 @@ function processJSXChildren(
   jsxElement.children.forEach((child) => {
     if (t.isJSXElement(child)) {
       if (!isReactComponent(child)) {
+        const lineNumber = child.loc?.start.line;
         child.openingElement.attributes.push(
           t.jsxAttribute(
             t.jsxIdentifier("data-rendered-by"),
-            t.stringLiteral(componentId),
+            t.stringLiteral(filename),
           ),
         );
-        processJSXChildren(child, componentId, false);
+        if (lineNumber) {
+          child.openingElement.attributes.push(
+            t.jsxAttribute(
+              t.jsxIdentifier("data-component-line"),
+              t.stringLiteral(lineNumber.toString()),
+            ),
+          );
+        }
+        processJSXChildren(child, filename, false);
       }
       processedChildren.push(child);
     } else if (t.isJSXText(child)) {
       const textContent = child.value.trim();
       if (textContent) {
+        const lineNumber = child.loc?.start.line;
+        const attributes = [
+          t.jsxAttribute(
+            t.jsxIdentifier("style"),
+            t.jsxExpressionContainer(
+              t.objectExpression([
+                t.objectProperty(
+                  t.stringLiteral("display"),
+                  t.stringLiteral("contents"),
+                ),
+              ]),
+            ),
+          ),
+          t.jsxAttribute(
+            t.jsxIdentifier("data-rendered-by"),
+            t.stringLiteral(filename),
+          ),
+        ];
+        
+        if (lineNumber) {
+          attributes.push(
+            t.jsxAttribute(
+              t.jsxIdentifier("data-component-line"),
+              t.stringLiteral(lineNumber.toString()),
+            ),
+          );
+        }
+        
         const wrappedTextElement = t.jsxElement(
-          t.jsxOpeningElement(t.jsxIdentifier("span"), [
-            t.jsxAttribute(
-              t.jsxIdentifier("style"),
-              t.jsxExpressionContainer(
-                t.objectExpression([
-                  t.objectProperty(
-                    t.stringLiteral("display"),
-                    t.stringLiteral("contents"),
-                  ),
-                ]),
-              ),
-            ),
-            t.jsxAttribute(
-              t.jsxIdentifier("data-rendered-by"),
-              t.stringLiteral(componentId),
-            ),
-          ]),
+          t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),
           t.jsxClosingElement(t.jsxIdentifier("span")),
           [child],
         );
@@ -294,24 +312,36 @@ function processJSXChildren(
       ) {
         processedChildren.push(child);
       } else if (t.isIdentifier(child.expression)) {
+        const lineNumber = child.loc?.start.line;
+        const attributes = [
+          t.jsxAttribute(
+            t.jsxIdentifier("style"),
+            t.jsxExpressionContainer(
+              t.objectExpression([
+                t.objectProperty(
+                  t.stringLiteral("display"),
+                  t.stringLiteral("contents"),
+                ),
+              ]),
+            ),
+          ),
+          t.jsxAttribute(
+            t.jsxIdentifier("data-rendered-by"),
+            t.stringLiteral(filename),
+          ),
+        ];
+        
+        if (lineNumber) {
+          attributes.push(
+            t.jsxAttribute(
+              t.jsxIdentifier("data-component-line"),
+              t.stringLiteral(lineNumber.toString()),
+            ),
+          );
+        }
+        
         const wrappedExpressionElement = t.jsxElement(
-          t.jsxOpeningElement(t.jsxIdentifier("span"), [
-            t.jsxAttribute(
-              t.jsxIdentifier("style"),
-              t.jsxExpressionContainer(
-                t.objectExpression([
-                  t.objectProperty(
-                    t.stringLiteral("display"),
-                    t.stringLiteral("contents"),
-                  ),
-                ]),
-              ),
-            ),
-            t.jsxAttribute(
-              t.jsxIdentifier("data-rendered-by"),
-              t.stringLiteral(componentId),
-            ),
-          ]),
+          t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),
           t.jsxClosingElement(t.jsxIdentifier("span")),
           [child],
         );
@@ -332,13 +362,13 @@ function processJSXChildren(
 
 function addRenderedByToFragmentChildren(
   jsxFragment: JSXFragment,
-  componentId: string,
+  filename: string,
 ): void {
   if (!jsxFragment.children) return;
 
   jsxFragment.children.forEach((child) => {
     if (t.isJSXElement(child)) {
-      processJSXChildren(child, componentId);
+      processJSXChildren(child, filename);
     }
   });
 }

@@ -73,22 +73,20 @@ describe("Complex Real-World Scenarios", () => {
   test("should properly handle text wrapping in nested component hierarchies", () => {
     const output = transform(heroWithButtonInput, "src/Hero.js");
 
-    // Hero should have its own editor-id
+    // Hero component should have proper attributes
     const heroAttrs = getAttributes(output, "section");
-    expect(heroAttrs["data-file"]).toBe("src/Hero.js");
-    expect(heroAttrs["data-editor-id"]).toMatch(/^hero_/);
-    const heroId = heroAttrs["data-editor-id"];
+    expect(heroAttrs["data-component-file"]).toBe("src/Hero.js");
+    expect(heroAttrs["data-component-name"]).toBe("Hero");
 
-    // Currently both Button and Hero get the same ID (same file)
-    // This is the issue we need to fix - Button should get Button's ID
+    // Button component should have proper attributes  
     const buttonAttrs = getAttributes(output, "button");
-    expect(buttonAttrs["data-file"]).toBe("src/Hero.js");
-    expect(buttonAttrs["data-editor-id"]).toMatch(/^button_/); // Currently same ID
+    expect(buttonAttrs["data-component-file"]).toBe("src/Hero.js");
+    expect(buttonAttrs["data-component-name"]).toBe("Button");
 
     // The text "Get Started Today" should be wrapped in a span
-    // with Hero's editor-id in data-rendered-by (Hero authored this text)
+    // with src/Hero.js in data-rendered-by (file authored this text)
     expect(output).toContain("Get Started Today");
-    expect(output).toContain(`data-rendered-by="${heroId}"`);
+    expect(output).toContain(`data-rendered-by="src/Hero.js"`);
 
     // Should have spans for text wrapping
     expect(output).toContain("<span style={{");

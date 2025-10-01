@@ -20,10 +20,12 @@ describe("Nested Component Scenarios", () => {
     const output = transform(nestedComponentsInput, "src/Card.js");
 
     const rootDivAttrs = getAttributes(output, "div");
-    const componentId = rootDivAttrs["data-editor-id"];
+    expect(rootDivAttrs["data-component-file"]).toBe("src/Card.js");
+    expect(rootDivAttrs["data-component-name"]).toBe("Card");
 
-    // HTML elements should have data-rendered-by pointing to Card
-    expect(output).toContain(`data-rendered-by="${componentId}"`);
+    // HTML elements should have data-rendered-by pointing to file
+    const filename = "src/Card.js";
+    expect(output).toContain(`data-rendered-by="${filename}"`);
 
     // React components should not have data-rendered-by
     expect(output).not.toContain("<CardHeader data-rendered-by");

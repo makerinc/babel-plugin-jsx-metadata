@@ -36,8 +36,9 @@ describe("Text Node Wrapping", () => {
     expect(output).toContain("{children}");
     expect(output).not.toContain("data-rendered-by=\"button_");
     
-    // Button should still get its editor-id
-    expect(output).toContain("data-editor-id=\"button_");
+    // Button should still get component metadata
+    expect(output).toContain("data-component-file=\"src/Button.js\"");
+    expect(output).toContain("data-component-name=\"Button\"");
   });
 
   test("should not wrap whitespace-only text nodes", () => {

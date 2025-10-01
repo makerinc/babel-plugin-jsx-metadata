@@ -18,13 +18,13 @@ describe("Fragment Support", () => {
   test("should handle JSX fragments", () => {
     const output = transform(jsxFragmentInput, "src/List.js");
 
-    // Fragment children should be treated as roots
+    // Fragment children should be treated as roots with component metadata
     const h2Attrs = getAttributes(output, "h2");
     const ulAttrs = getAttributes(output, "ul");
 
-    expect(h2Attrs["data-file"]).toBe("src/List.js");
-    expect(ulAttrs["data-file"]).toBe("src/List.js");
-    expect(h2Attrs["data-editor-id"]).toMatch(/^list_/);
-    expect(ulAttrs["data-editor-id"]).toMatch(/^list_/);
+    expect(h2Attrs["data-component-file"]).toBe("src/List.js");
+    expect(h2Attrs["data-component-name"]).toBe("List");
+    expect(ulAttrs["data-component-file"]).toBe("src/List.js");
+    expect(ulAttrs["data-component-name"]).toBe("List");
   });
 });

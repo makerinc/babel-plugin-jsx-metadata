@@ -4,34 +4,22 @@ import { transform, getAttributes } from "./test-helpers";
 // Test fixtures
 const filenameTestInput = (name) => `const ${name} = () => <div>Test</div>;`;
 
-describe("ID Generation", () => {
-  test("should generate snake_case IDs from filenames", () => {
+describe("Component Metadata Generation", () => {
+  test("should use file paths and component names for metadata", () => {
     const testCases = [
-      { name: "Button", filename: "src/Button.js", expectedPrefix: "button_" },
-      {
-        name: "UserCard",
-        filename: "src/components/UserCard.tsx",
-        expectedPrefix: "usercard_",
-      },
-      {
-        name: "ContactUs",
-        filename: "src/pages/contact-us.jsx",
-        expectedPrefix: "contactus_",
-      },
-      {
-        name: "DataHelpers",
-        filename: "src/utils/data.helpers.js",
-        expectedPrefix: "datahelpers_",
-      },
+      { name: "Button", filename: "src/Button.js" },
+      { name: "UserCard", filename: "src/components/UserCard.tsx" },
+      { name: "ContactUs", filename: "src/pages/contact-us.jsx" },
+      { name: "DataHelpers", filename: "src/utils/data.helpers.js" },
     ];
 
-    testCases.forEach(({ name, filename, expectedPrefix }) => {
+    testCases.forEach(({ name, filename }) => {
       const output = transform(filenameTestInput(name), filename);
       const divAttrs = getAttributes(output, "div");
 
-      expect(divAttrs["data-editor-id"]).toMatch(
-        new RegExp(`^${expectedPrefix}`),
-      );
+      // Should use file path and component name directly
+      expect(divAttrs["data-component-file"]).toBe(filename);
+      expect(divAttrs["data-component-name"]).toBe(name);
     });
   });
 });

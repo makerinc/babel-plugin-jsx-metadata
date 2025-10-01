@@ -11,31 +11,33 @@ const basicArrowInput = `const Card = () => <div className="card">Content</div>;
 const uniqueIdTestInput = `const Hero = () => <section>Hero content</section>;`;
 
 describe("Component Root Elements", () => {
-  test("should add data-file and data-editor-id to return statement JSX", () => {
+  test("should add data-component-file and data-component-name to return statement JSX", () => {
     const output = transform(basicFunctionInput, "src/Button.js");
     const buttonAttrs = getAttributes(output, "button");
 
-    expect(buttonAttrs["data-file"]).toBe("src/Button.js");
-    expect(buttonAttrs["data-editor-id"]).toMatch(/^button_/);
+    expect(buttonAttrs["data-component-file"]).toBe("src/Button.js");
+    expect(buttonAttrs["data-component-name"]).toBe("Button");
   });
 
-  test("should add data-file and data-editor-id to arrow function JSX", () => {
+  test("should add data-component-file and data-component-name to arrow function JSX", () => {
     const output = transform(basicArrowInput, "src/Card.jsx");
     const divAttrs = getAttributes(output, "div");
 
-    expect(divAttrs["data-file"]).toBe("src/Card.jsx");
-    expect(divAttrs["data-editor-id"]).toMatch(/^card_/);
+    expect(divAttrs["data-component-file"]).toBe("src/Card.jsx");
+    expect(divAttrs["data-component-name"]).toBe("Card");
   });
 
-  test("should generate unique IDs with filename prefix", () => {
+  test("should generate consistent component metadata", () => {
     const output1 = transform(uniqueIdTestInput, "src/Hero.js");
     const output2 = transform(uniqueIdTestInput, "src/components/Hero.tsx");
 
     const attrs1 = getAttributes(output1, "section");
     const attrs2 = getAttributes(output2, "section");
 
-    expect(attrs1["data-editor-id"]).toMatch(/^hero_/);
-    expect(attrs2["data-editor-id"]).toMatch(/^hero_/);
-    expect(attrs1["data-editor-id"]).not.toBe(attrs2["data-editor-id"]);
+    // Should use file path and component name
+    expect(attrs1["data-component-file"]).toBe("src/Hero.js");
+    expect(attrs1["data-component-name"]).toBe("Hero");
+    expect(attrs2["data-component-file"]).toBe("src/components/Hero.tsx");
+    expect(attrs2["data-component-name"]).toBe("Hero");
   });
 });

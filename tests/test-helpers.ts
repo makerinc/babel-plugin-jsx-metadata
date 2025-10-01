@@ -36,7 +36,7 @@ export function transform(code: string, filename = "test.js") {
       outputPath,
       `// Original file: ${filename}\n// Input:\n/*\n${code}\n*/\n\n// Transformed output:\n${transformedCode}`,
     );
-  } catch (error) {
+  } catch (_) {
     // Ignore file write errors in tests
   }
 

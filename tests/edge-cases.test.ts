@@ -13,7 +13,7 @@ const basicFunctionInput = `function Button() {
 }`;
 
 const existingDataFileInput = `function Existing() {
-  return <div data-file="existing.js">Content</div>;
+  return <div data-component-file="existing.js">Content</div>;
 }`;
 
 describe("Edge Cases", () => {
@@ -21,7 +21,7 @@ describe("Edge Cases", () => {
     const output = transform(imageOptimizerInput, "ImageOptimizer.jsx");
 
     // Should not add any data attributes
-    expect(output).not.toContain("data-file");
+    expect(output).not.toContain("data-component-file");
     expect(output).not.toContain("data-editor-id");
     expect(output).not.toContain("data-rendered-by");
   });
@@ -41,17 +41,17 @@ describe("Edge Cases", () => {
     const output = result?.code || "";
 
     // Should not add any data attributes
-    expect(output).not.toContain("data-file");
+    expect(output).not.toContain("data-component-file");
     expect(output).not.toContain("data-editor-id");
     expect(output).not.toContain("data-rendered-by");
   });
 
-  test("should not modify elements that already have data-file", () => {
+  test("should not modify elements that already have data-component-file", () => {
     const output = transform(existingDataFileInput, "src/New.js");
 
-    // Should keep existing data-file and not add new attributes
-    expect(output).toContain('data-file="existing.js"');
-    expect(output).not.toContain('data-file="src/New.js"');
+    // Should keep existing data-component-file and not add new attributes
+    expect(output).toContain('data-component-file="existing.js"');
+    expect(output).not.toContain('data-component-file="src/New.js"');
     expect(output).not.toContain("data-editor-id");
   });
 });

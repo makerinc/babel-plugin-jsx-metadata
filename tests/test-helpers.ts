@@ -11,9 +11,9 @@ export function transform(code: string, filename = "test.js") {
       plugins: ["jsx", "typescript"],
     },
   });
-  
+
   const transformedCode = result?.code || "";
-  
+
   // Debug: dump transformed code to outputs directory
   try {
     // Get the test file name from the call stack
@@ -21,20 +21,25 @@ export function transform(code: string, filename = "test.js") {
     const stack = error.stack || "";
     const match = stack.match(/at.*[\/\\]([^\/\\]+)\.test\./);
     const specName = match ? match[1] : "unknown";
-    
+
     const outputDir = join(__dirname, "outputs", specName);
-    const outputFilename = filename.replace(/[\/\\]/g, "_").replace(/\.(js|jsx|ts|tsx)$/, "") + "_output.js";
+    const outputFilename =
+      filename.replace(/[\/\\]/g, "_").replace(/\.(js|jsx|ts|tsx)$/, "") +
+      "_output.js";
     const outputPath = join(outputDir, outputFilename);
-    
+
     // Ensure directory exists
     const { mkdirSync } = require("fs");
     mkdirSync(outputDir, { recursive: true });
-    
-    writeFileSync(outputPath, `// Original file: ${filename}\n// Input:\n/*\n${code}\n*/\n\n// Transformed output:\n${transformedCode}`);
+
+    writeFileSync(
+      outputPath,
+      `// Original file: ${filename}\n// Input:\n/*\n${code}\n*/\n\n// Transformed output:\n${transformedCode}`,
+    );
   } catch (error) {
     // Ignore file write errors in tests
   }
-  
+
   return transformedCode;
 }
 

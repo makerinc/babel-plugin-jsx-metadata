@@ -1,4 +1,5 @@
 import { type PluginObj, types as t } from "@babel/core";
+import type { NodePath } from "@babel/traverse";
 import type { ConfigAPI } from "@babel/core";
 import type {
   CallExpression,
@@ -9,6 +10,7 @@ import type {
   JSXOpeningElement,
   JSXSpreadChild,
   JSXText,
+  ReturnStatement,
 } from "@babel/types";
 
 type JSXChild =
@@ -39,17 +41,21 @@ function generateUniqueId(componentName: string): string {
   return `${prefix}_${timestamp}_${randomPart}`;
 }
 
-function getComponentName(path: any): string | null {
+function getComponentName(path: NodePath): string | null {
   // For function declarations: function Button() {}
   if (path.isFunctionDeclaration() && path.node.id) {
     return path.node.id.name;
   }
-  
+
   // For variable declarations with arrow functions: const Button = () => {}
-  if (path.isVariableDeclarator() && path.node.id && t.isIdentifier(path.node.id)) {
+  if (
+    path.isVariableDeclarator() &&
+    path.node.id &&
+    t.isIdentifier(path.node.id)
+  ) {
     return path.node.id.name;
   }
-  
+
   return null;
 }
 
@@ -82,11 +88,15 @@ function componentDataPlugin(
           processComponent(path, componentName, filename);
         }
       },
-      
+
       // Handle variable declarations with arrow functions: const Button = () => {}
       VariableDeclarator(path) {
         const componentName = getComponentName(path);
-        if (componentName && (t.isArrowFunctionExpression(path.node.init) || t.isFunctionExpression(path.node.init))) {
+        if (
+          componentName &&
+          (t.isArrowFunctionExpression(path.node.init) ||
+            t.isFunctionExpression(path.node.init))
+        ) {
           processComponent(path, componentName, filename);
         }
       },
@@ -94,22 +104,26 @@ function componentDataPlugin(
   };
 }
 
-function processComponent(path: any, componentName: string, filename: string): void {
+function processComponent(
+  path: NodePath,
+  componentName: string,
+  filename: string,
+): void {
   const componentId = generateUniqueId(componentName);
-  
+
   // Handle function declarations: function Button() { return <jsx> }
   if (path.isFunctionDeclaration()) {
     path.traverse({
-      ReturnStatement(returnPath: any) {
+      ReturnStatement(returnPath: NodePath<ReturnStatement>) {
         processComponentReturn(returnPath, filename, componentId);
-      }
+      },
     });
   }
-  
+
   // Handle arrow functions: const Button = () => <jsx> or const Button = () => { return <jsx> }
   if (path.isVariableDeclarator() && path.node.init) {
     const func = path.node.init;
-    
+
     if (t.isArrowFunctionExpression(func)) {
       // Direct return: const Button = () => <jsx>
       if (t.isJSXElement(func.body)) {
@@ -129,26 +143,30 @@ function processComponent(path: any, componentName: string, filename: string): v
       // Block body: const Button = () => { return <jsx> }
       else if (t.isBlockStatement(func.body)) {
         path.traverse({
-          ReturnStatement(returnPath: any) {
+          ReturnStatement(returnPath: NodePath<ReturnStatement>) {
             processComponentReturn(returnPath, filename, componentId);
-          }
+          },
         });
       }
     }
-    
+
     if (t.isFunctionExpression(func)) {
       path.traverse({
-        ReturnStatement(returnPath: any) {
+        ReturnStatement(returnPath: NodePath<ReturnStatement>) {
           processComponentReturn(returnPath, filename, componentId);
-        }
+        },
       });
     }
   }
 }
 
-function processComponentReturn(returnPath: any, filename: string, componentId: string): void {
+function processComponentReturn(
+  returnPath: NodePath<ReturnStatement>,
+  filename: string,
+  componentId: string,
+): void {
   const argument = returnPath.node.argument;
-  
+
   if (t.isJSXElement(argument)) {
     addEditorMetadata(argument, filename, componentId, true);
     processJSXChildren(argument, componentId, true);
@@ -269,7 +287,13 @@ function processJSXChildren(
         processedChildren.push(child);
       }
     } else if (t.isJSXExpressionContainer(child) && wrapExpressions) {
-      if (t.isIdentifier(child.expression)) {
+      // Special handling for {children} - don't wrap it, let it flow through unchanged
+      if (
+        t.isIdentifier(child.expression) &&
+        child.expression.name === "children"
+      ) {
+        processedChildren.push(child);
+      } else if (t.isIdentifier(child.expression)) {
         const wrappedExpressionElement = t.jsxElement(
           t.jsxOpeningElement(t.jsxIdentifier("span"), [
             t.jsxAttribute(

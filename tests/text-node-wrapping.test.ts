@@ -29,13 +29,15 @@ describe("Text Node Wrapping", () => {
     expect(output).toContain("Welcome to our site");
   });
 
-  test("should wrap {children} expression in component", () => {
+  test("should NOT wrap {children} expression to preserve authorship", () => {
     const output = transform(childrenPropInput, "src/Button.js");
 
-    // {children} should be wrapped in span
-    expect(output).toContain("<span style={{");
-    expect(output).toContain("data-rendered-by=");
+    // {children} should NOT be wrapped to preserve authorship across components
     expect(output).toContain("{children}");
+    expect(output).not.toContain("data-rendered-by=\"button_");
+    
+    // Button should still get its editor-id
+    expect(output).toContain("data-editor-id=\"button_");
   });
 
   test("should not wrap whitespace-only text nodes", () => {

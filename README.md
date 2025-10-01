@@ -1,6 +1,6 @@
-# Babel Plugin: DOM Editor
+# Babel Plugin: JSX Metadata
 
-A Babel plugin that adds DOM metadata for visual editing functionality. This plugin processes React JSX elements during compilation to inject data attributes that enable element selection and ownership tracking in visual editors.
+A Babel plugin that injects metadata into JSX elements for visual editor integration. This plugin processes JSX elements during compilation to inject data attributes that enable component tracking, authorship detection, and precise source location mapping in visual editing tools.
 
 ## Features
 
@@ -15,7 +15,7 @@ A Babel plugin that adds DOM metadata for visual editing functionality. This plu
 ## Installation
 
 ```bash
-npm install babel-plugin-dom-editor
+npm install babel-plugin-jsx-metadata
 ```
 
 ## Usage
@@ -26,7 +26,7 @@ Add the plugin to your Babel configuration:
 // babel.config.js
 module.exports = {
   plugins: [
-    ['babel-plugin-dom-editor', {
+    ['babel-plugin-jsx-metadata', {
       filename: 'src/Component.js', // Current file being processed
       skipFiles: ['ImageOptimizer.jsx'] // Optional: files to skip
     }]
@@ -38,13 +38,13 @@ module.exports = {
 
 ### Component Root Detection
 
-The plugin identifies React component return values by traversing:
+The plugin identifies JSX component return values by traversing:
 - `FunctionDeclaration` nodes with JSX returns
 - `VariableDeclarator` nodes with arrow functions returning JSX
 
 ### Metadata Injection
 
-For each component, the plugin:
+For each JSX component, the plugin:
 
 1. **Adds component metadata** to root elements:
    - `data-component-file`: Source file path
@@ -85,9 +85,9 @@ The plugin wraps text content in components to enable selection:
 
 ## Component Ownership Tracking
 
-The plugin uses PascalCase detection to identify React components vs HTML elements:
+The plugin uses PascalCase detection to identify JSX components vs HTML elements:
 
-- **React Components** (PascalCase): `Button`, `Header`, `Card`
+- **JSX Components** (PascalCase): `Button`, `Header`, `Card`
   - Skip adding `data-rendered-by` (they have their own component metadata)
 
 - **HTML Elements** (lowercase): `div`, `button`, `span`

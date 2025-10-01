@@ -54,13 +54,13 @@ function componentDataPlugin(
     )
   ) {
     return {
-      name: "babel-plugin-dom-editor",
+      name: "babel-plugin-jsx-metadata",
       visitor: {},
     };
   }
 
   return {
-    name: "babel-plugin-dom-editor",
+    name: "babel-plugin-jsx-metadata",
     visitor: {
       // Handle function declarations: function Button() {}
       FunctionDeclaration(path) {

@@ -1,7 +1,7 @@
 {
-  "name": "babel-plugin-dom-editor",
+  "name": "babel-plugin-jsx-metadata",
   "version": "1.0.0",
-  "description": "Babel plugin that adds DOM metadata for visual editing functionality",
+  "description": "Babel plugin that injects metadata into JSX elements for visual editor integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -16,11 +16,12 @@
   "keywords": [
     "babel",
     "plugin",
-    "react",
     "jsx",
+    "metadata",
+    "react",
     "visual-editor",
-    "dom",
-    "metadata"
+    "component-tracking",
+    "authorship"
   ],
   "author": "Your Name",
   "license": "MIT",

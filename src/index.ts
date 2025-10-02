@@ -176,7 +176,8 @@ function addEditorMetadata(
   );
 
   if (!hasDataFile) {
-    const lineNumber = jsxElement.loc?.start.line;
+    const startLine = jsxElement.loc?.start.line;
+    const endLine = jsxElement.loc?.end.line;
 
     if (isRoot) {
       openingElement.attributes.push(
@@ -191,11 +192,19 @@ function addEditorMetadata(
           t.stringLiteral(componentName),
         ),
       );
-      if (lineNumber) {
+      if (startLine) {
         openingElement.attributes.push(
           t.jsxAttribute(
-            t.jsxIdentifier("data-component-line"),
-            t.stringLiteral(lineNumber.toString()),
+            t.jsxIdentifier("data-component-line-start"),
+            t.stringLiteral(startLine.toString()),
+          ),
+        );
+      }
+      if (endLine) {
+        openingElement.attributes.push(
+          t.jsxAttribute(
+            t.jsxIdentifier("data-component-line-end"),
+            t.stringLiteral(endLine.toString()),
           ),
         );
       }
@@ -206,11 +215,19 @@ function addEditorMetadata(
           t.stringLiteral(filename),
         ),
       );
-      if (lineNumber) {
+      if (startLine) {
         openingElement.attributes.push(
           t.jsxAttribute(
-            t.jsxIdentifier("data-component-line"),
-            t.stringLiteral(lineNumber.toString()),
+            t.jsxIdentifier("data-component-line-start"),
+            t.stringLiteral(startLine.toString()),
+          ),
+        );
+      }
+      if (endLine) {
+        openingElement.attributes.push(
+          t.jsxAttribute(
+            t.jsxIdentifier("data-component-line-end"),
+            t.stringLiteral(endLine.toString()),
           ),
         );
       }
@@ -246,18 +263,27 @@ function processJSXChildren(
     if (t.isJSXElement(child)) {
       if (!isReactComponent(child)) {
         // HTML elements: just add data-rendered-by attribute, no text wrapping
-        const lineNumber = child.loc?.start.line;
+        const startLine = child.loc?.start.line;
+        const endLine = child.loc?.end.line;
         child.openingElement.attributes.push(
           t.jsxAttribute(
             t.jsxIdentifier("data-rendered-by"),
             t.stringLiteral(filename),
           ),
         );
-        if (lineNumber) {
+        if (startLine) {
           child.openingElement.attributes.push(
             t.jsxAttribute(
-              t.jsxIdentifier("data-component-line"),
-              t.stringLiteral(lineNumber.toString()),
+              t.jsxIdentifier("data-component-line-start"),
+              t.stringLiteral(startLine.toString()),
+            ),
+          );
+        }
+        if (endLine) {
+          child.openingElement.attributes.push(
+            t.jsxAttribute(
+              t.jsxIdentifier("data-component-line-end"),
+              t.stringLiteral(endLine.toString()),
             ),
           );
         }
@@ -271,7 +297,8 @@ function processJSXChildren(
       const textContent = child.value.trim();
       if (textContent && wrapExpressions) {
         // Only wrap text when we're inside a React component (wrapExpressions = true)
-        const lineNumber = child.loc?.start.line;
+        const startLine = child.loc?.start.line;
+        const endLine = child.loc?.end.line;
         const attributes = [
           t.jsxAttribute(
             t.jsxIdentifier("data-rendered-by"),
@@ -279,11 +306,19 @@ function processJSXChildren(
           ),
         ];
 
-        if (lineNumber) {
+        if (startLine) {
           attributes.push(
             t.jsxAttribute(
-              t.jsxIdentifier("data-component-line"),
-              t.stringLiteral(lineNumber.toString()),
+              t.jsxIdentifier("data-component-line-start"),
+              t.stringLiteral(startLine.toString()),
+            ),
+          );
+        }
+        if (endLine) {
+          attributes.push(
+            t.jsxAttribute(
+              t.jsxIdentifier("data-component-line-end"),
+              t.stringLiteral(endLine.toString()),
             ),
           );
         }
@@ -306,7 +341,8 @@ function processJSXChildren(
       ) {
         processedChildren.push(child);
       } else if (t.isIdentifier(child.expression)) {
-        const lineNumber = child.loc?.start.line;
+        const startLine = child.loc?.start.line;
+        const endLine = child.loc?.end.line;
         const attributes = [
           t.jsxAttribute(
             t.jsxIdentifier("data-rendered-by"),
@@ -314,11 +350,19 @@ function processJSXChildren(
           ),
         ];
 
-        if (lineNumber) {
+        if (startLine) {
           attributes.push(
             t.jsxAttribute(
-              t.jsxIdentifier("data-component-line"),
-              t.stringLiteral(lineNumber.toString()),
+              t.jsxIdentifier("data-component-line-start"),
+              t.stringLiteral(startLine.toString()),
+            ),
+          );
+        }
+        if (endLine) {
+          attributes.push(
+            t.jsxAttribute(
+              t.jsxIdentifier("data-component-line-end"),
+              t.stringLiteral(endLine.toString()),
             ),
           );
         }

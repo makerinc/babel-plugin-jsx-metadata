@@ -6,7 +6,7 @@ A Babel plugin that injects metadata into JSX elements for visual editor integra
 
 - **Component Root Detection**: Automatically identifies React component boundaries
 - **File-based Ownership**: Uses simple file paths for tracking element authorship
-- **Line Number Tracking**: Adds source line numbers for precise element location
+- **Line Range Tracking**: Adds source line start/end numbers for precise element location
 - **Text Node Wrapping**: Wraps text content to enable proper selection and editing
 - **PascalCase Detection**: Distinguishes React components from HTML elements
 - **Fragment Support**: Handles JSX fragments correctly
@@ -49,11 +49,13 @@ For each JSX component, the plugin:
 1. **Adds component metadata** to root elements:
    - `data-component-file`: Source file path
    - `data-component-name`: Component name (e.g., "Button", "Hero")
-   - `data-component-line`: Source line number
+   - `data-component-line-start`: Source line number where element starts
+   - `data-component-line-end`: Source line number where element ends
 
 2. **Adds ownership tracking** to child elements:
    - `data-rendered-by`: File path of the authoring component
-   - `data-component-line`: Source line number
+   - `data-component-line-start`: Source line number where element starts
+   - `data-component-line-end`: Source line number where element ends
 
 ### Text Node Wrapping
 
@@ -65,8 +67,8 @@ The plugin wraps text content in components to enable selection:
 <div>Hello World</div>
 
 // After
-<div data-component-file="src/Component.js" data-component-name="Component" data-component-line="5">
-  <span style={{display: 'contents'}} data-rendered-by="src/Component.js" data-component-line="5">
+<div data-component-file="src/Component.js" data-component-name="Component" data-component-line-start="5" data-component-line-end="7">
+  <span style={{display: 'contents'}} data-rendered-by="src/Component.js" data-component-line-start="6" data-component-line-end="6">
     Hello World
   </span>
 </div>
@@ -78,7 +80,7 @@ The plugin wraps text content in components to enable selection:
 <Button variant="primary">Get Started Today</Button>
 
 // Button receives text from Hero and preserves authorship
-<button data-component-file="src/Hero.js" data-component-name="Button" data-component-line="37">
+<button data-component-file="src/Hero.js" data-component-name="Button" data-component-line-start="37" data-component-line-end="39">
   {children} // NOT wrapped - preserves Hero's authorship of "Get Started Today"
 </button>
 ```
@@ -92,7 +94,7 @@ The plugin uses PascalCase detection to identify JSX components vs HTML elements
 
 - **HTML Elements** (lowercase): `div`, `button`, `span`
   - Add `data-rendered-by` pointing to the file that authored them
-  - Add `data-component-line` with source line number
+  - Add `data-component-line-start` and `data-component-line-end` with source line range
 
 ## Configuration Options
 
@@ -130,7 +132,8 @@ const Button = ({ children, variant }) => {
       className={`btn btn-${variant}`}
       data-component-file="src/Button.js"
       data-component-name="Button"
-      data-component-line="3"
+      data-component-line-start="3"
+      data-component-line-end="6"
     >
       {children}
     </button>
@@ -145,16 +148,19 @@ Note how `{children}` is NOT wrapped to preserve cross-component authorship trac
 ### Component Root Elements
 - **`data-component-file`**: File path where the component is defined (e.g., `"src/Button.js"`)
 - **`data-component-name`**: Component name (e.g., `"Button"`, `"Hero"`)
-- **`data-component-line`**: Source line number where the JSX element starts
+- **`data-component-line-start`**: Source line number where the JSX element starts
+- **`data-component-line-end`**: Source line number where the JSX element ends
 
 ### Child Elements
 - **`data-rendered-by`**: File path of the component that authored this element
-- **`data-component-line`**: Source line number where the element was defined
+- **`data-component-line-start`**: Source line number where the element starts
+- **`data-component-line-end`**: Source line number where the element ends
 
 ### Text Spans
 Automatically wrapped text nodes get:
 - **`data-rendered-by`**: File path of the authoring component
-- **`data-component-line`**: Source line number of the text
+- **`data-component-line-start`**: Source line number where the text starts
+- **`data-component-line-end`**: Source line number where the text ends
 - **`style={{display: 'contents'}}`**: Preserves layout while enabling selection
 
 ## Visual Editor Integration
@@ -163,7 +169,7 @@ The injected metadata enables:
 
 1. **Element Selection**: Click handlers use `data-component-name` to identify components
 2. **File Navigation**: `data-component-file` determines which file to open for editing
-3. **Line Jumping**: `data-component-line` enables jumping to exact source locations
+3. **Line Range Navigation**: `data-component-line-start` and `data-component-line-end` enable jumping to exact source locations and selecting multi-line elements
 4. **Ownership Tracking**: `data-rendered-by` determines which file authored each element
 5. **Text Editing**: Wrapped text nodes can be selected and modified while preserving authorship
 

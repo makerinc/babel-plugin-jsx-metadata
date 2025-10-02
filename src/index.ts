@@ -304,13 +304,7 @@ function processJSXChildren(
         processedChildren.push(child);
       }
     } else if (t.isJSXExpressionContainer(child) && wrapExpressions) {
-      // Special handling for {children} - don't wrap it, let it flow through unchanged
-      if (
-        t.isIdentifier(child.expression) &&
-        child.expression.name === "children"
-      ) {
-        processedChildren.push(child);
-      } else if (t.isIdentifier(child.expression)) {
+      if (t.isIdentifier(child.expression)) {
         const attributes = createRenderedByAttributes(filename, child);
 
         const wrappedExpressionElement = t.jsxElement(

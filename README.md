@@ -41,11 +41,15 @@ For each JSX component, the plugin:
    - `data-component-name`: Component name (e.g., "Button", "Hero")
    - `data-component-line-start`: Source line number where element starts
    - `data-component-line-end`: Source line number where element ends
+   - `data-component-col-start`: Source column number where element starts
+   - `data-component-col-end`: Source column number where element ends
 
 2. **Adds ownership tracking** to child elements:
    - `data-rendered-by`: File path of the authoring component
    - `data-component-line-start`: Source line number where element starts
    - `data-component-line-end`: Source line number where element ends
+   - `data-component-col-start`: Source column number where element starts
+   - `data-component-col-end`: Source column number where element ends
 
 ### Text Node Wrapping
 
@@ -84,7 +88,7 @@ The plugin uses PascalCase detection to identify JSX components vs HTML elements
 
 - **HTML Elements** (lowercase): `div`, `button`, `span`
   - Add `data-rendered-by` pointing to the file that authored them
-  - Add `data-component-line-start` and `data-component-line-end` with source line range
+  - Add `data-component-line-start`, `data-component-line-end`, `data-component-col-start`, and `data-component-col-end` with source position range
 
 ## Configuration Options
 
@@ -108,17 +112,23 @@ Array of filenames or patterns to skip processing. Defaults to `[]`.
 - **`data-component-name`**: Component name (e.g., `"Button"`, `"Hero"`)
 - **`data-component-line-start`**: Source line number where the JSX element starts
 - **`data-component-line-end`**: Source line number where the JSX element ends
+- **`data-component-col-start`**: Source column number where the JSX element starts
+- **`data-component-col-end`**: Source column number where the JSX element ends
 
 ### Child Elements
 - **`data-rendered-by`**: File path of the component that authored this element
 - **`data-component-line-start`**: Source line number where the element starts
 - **`data-component-line-end`**: Source line number where the element ends
+- **`data-component-col-start`**: Source column number where the element starts
+- **`data-component-col-end`**: Source column number where the element ends
 
 ### Text Spans
 Automatically wrapped text nodes get:
 - **`data-rendered-by`**: File path of the authoring component
 - **`data-component-line-start`**: Source line number where the text starts
 - **`data-component-line-end`**: Source line number where the text ends
+- **`data-component-col-start`**: Source column number where the text starts
+- **`data-component-col-end`**: Source column number where the text ends
 
 ## Visual Editor Integration
 
@@ -126,7 +136,7 @@ The injected metadata enables:
 
 1. **Element Selection**: Click handlers use `data-component-name` to identify components
 2. **File Navigation**: `data-component-file` determines which file to open for editing
-3. **Line Range Navigation**: `data-component-line-start` and `data-component-line-end` enable jumping to exact source locations and selecting multi-line elements
+3. **Precise Navigation**: `data-component-line-start`, `data-component-line-end`, `data-component-col-start`, and `data-component-col-end` enable jumping to exact source locations and selecting elements precisely, even multiple elements on the same line
 4. **Ownership Tracking**: `data-rendered-by` determines which file authored each element
 5. **Text Editing**: Wrapped text nodes can be selected and modified while preserving authorship
 

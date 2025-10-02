@@ -27,6 +27,8 @@ function createLineAttributes(node: {
   const attributes: JSXAttribute[] = [];
   const startLine = node.loc?.start.line;
   const endLine = node.loc?.end.line;
+  const startColumn = node.loc?.start.column;
+  const endColumn = node.loc?.end.column;
 
   if (startLine) {
     attributes.push(
@@ -41,6 +43,22 @@ function createLineAttributes(node: {
       t.jsxAttribute(
         t.jsxIdentifier("data-component-line-end"),
         t.stringLiteral(endLine.toString()),
+      ),
+    );
+  }
+  if (startColumn !== undefined) {
+    attributes.push(
+      t.jsxAttribute(
+        t.jsxIdentifier("data-component-col-start"),
+        t.stringLiteral(startColumn.toString()),
+      ),
+    );
+  }
+  if (endColumn !== undefined) {
+    attributes.push(
+      t.jsxAttribute(
+        t.jsxIdentifier("data-component-col-end"),
+        t.stringLiteral(endColumn.toString()),
       ),
     );
   }

@@ -2,16 +2,6 @@
 
 A Babel plugin that injects metadata into JSX elements for visual editor integration. This plugin processes JSX elements during compilation to inject data attributes that enable component tracking, authorship detection, and precise source location mapping in visual editing tools.
 
-## Features
-
-- **Component Root Detection**: Automatically identifies React component boundaries
-- **File-based Ownership**: Uses simple file paths for tracking element authorship
-- **Line Range Tracking**: Adds source line start/end numbers for precise element location
-- **Text Node Wrapping**: Wraps text content to enable proper selection and editing
-- **PascalCase Detection**: Distinguishes React components from HTML elements
-- **Fragment Support**: Handles JSX fragments correctly
-- **Cross-Component Authorship**: Preserves text authorship when passed between components
-
 ## Installation
 
 ```bash
@@ -64,13 +54,13 @@ The plugin wraps text content in components to enable selection:
 #### Direct Text Nodes
 ```jsx
 // Before
-<div>Hello World</div>
+<div>
+  Hello World
+</div>
 
 // After
-<div data-component-file="src/Component.js" data-component-name="Component" data-component-line-start="5" data-component-line-end="7">
-  <span style={{display: 'contents'}} data-rendered-by="src/Component.js" data-component-line-start="6" data-component-line-end="6">
+<div data-rendered-by="src/Component.js" data-component-line-start="5" data-component-line-end="7">
     Hello World
-  </span>
 </div>
 ```
 
@@ -80,8 +70,8 @@ The plugin wraps text content in components to enable selection:
 <Button variant="primary">Get Started Today</Button>
 
 // Button receives text from Hero and preserves authorship
-<button data-component-file="src/Hero.js" data-component-name="Button" data-component-line-start="37" data-component-line-end="39">
-  {children} // NOT wrapped - preserves Hero's authorship of "Get Started Today"
+<button data-component-file="src/components/Button.js" data-component-name="Button" data-component-line-start="37" data-component-line-end="37">
+  <span data-rendered-by="src/Hero.js" data-component-line-start="37" data-component-line-end="37"> {children} </span>
 </button>
 ```
 
@@ -111,38 +101,6 @@ Array of filenames or patterns to skip processing. Defaults to `[]`.
 }
 ```
 
-## Output Example
-
-Given this component:
-```jsx
-const Button = ({ children, variant }) => {
-  return (
-    <button className={`btn btn-${variant}`}>
-      {children}
-    </button>
-  );
-};
-```
-
-The plugin transforms it to:
-```jsx
-const Button = ({ children, variant }) => {
-  return (
-    <button
-      className={`btn btn-${variant}`}
-      data-component-file="src/Button.js"
-      data-component-name="Button"
-      data-component-line-start="3"
-      data-component-line-end="6"
-    >
-      {children}
-    </button>
-  );
-};
-```
-
-Note how `{children}` is NOT wrapped to preserve cross-component authorship tracking.
-
 ## Data Attributes Reference
 
 ### Component Root Elements
@@ -161,7 +119,6 @@ Automatically wrapped text nodes get:
 - **`data-rendered-by`**: File path of the authoring component
 - **`data-component-line-start`**: Source line number where the text starts
 - **`data-component-line-end`**: Source line number where the text ends
-- **`style={{display: 'contents'}}`**: Preserves layout while enabling selection
 
 ## Visual Editor Integration
 
@@ -184,22 +141,11 @@ function componentDataPlugin(
 ): PluginObj
 ```
 
-### Utility Functions
-
-#### `getComponentName(path: NodePath): string | null`
-Extracts component name from function declarations and variable declarators.
-
-#### `isReactComponent(jsxElement: JSXElement): boolean`
-Detects React components using PascalCase naming convention.
-
-#### `addEditorMetadata(jsxElement, filename, componentName, isRoot)`
-Adds component metadata to JSX elements.
-
 ## Limitations
 
 1. Only processes direct JSX returns from components
 2. PascalCase detection may miss edge cases
-3. Adds spans that could affect styling (mitigated with `display: contents`)
+3. Adds spans that could affect styling
 4. Line numbers depend on source maps for accuracy in complex build setups
 5. Cross-component text authorship requires careful `{children}` handling
 

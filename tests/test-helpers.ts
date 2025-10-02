@@ -1,6 +1,6 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { transformSync } from "@babel/core";
-import { writeFileSync } from "fs";
-import { join } from "path";
 import plugin, { type options } from "../src/index";
 
 // Helper function to transform code with the plugin
@@ -61,7 +61,8 @@ export function getAttributes(
 
   // Extract data-* attributes
   const attrRegex = /(data-[\w-]+)="([^"]*)"/g;
-  let attrMatch;
+  let attrMatch: RegExpExecArray | null = null;
+  // biome-ignore lint/suspicious/noAssignInExpressions::
   while ((attrMatch = attrRegex.exec(attributesStr)) !== null) {
     attributes[attrMatch[1]] = attrMatch[2];
   }

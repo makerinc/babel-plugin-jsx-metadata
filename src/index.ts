@@ -1,6 +1,6 @@
-import { type PluginObj, types as t } from "@babel/core";
-import type { NodePath } from "@babel/traverse";
 import type { ConfigAPI } from "@babel/core";
+import type { NodePath } from "@babel/traverse";
+import { type PluginObj, types as t } from "@babel/core";
 import type {
   CallExpression,
   JSXAttribute,
@@ -20,17 +20,9 @@ type JSXChild =
   | JSXFragment
   | JSXSpreadChild;
 
-// Removed unused ID generation functions since we're using file paths now
-
 function getComponentName(path: NodePath): string | null {
-  // For function declarations: function Button() {}
-  if (path.isFunctionDeclaration() && path.node.id) {
-    return path.node.id.name;
-  }
-
-  // For variable declarations with arrow functions: const Button = () => {}
   if (
-    path.isVariableDeclarator() &&
+    (path.isVariableDeclarator() || path.isFunctionDeclaration()) &&
     path.node.id &&
     t.isIdentifier(path.node.id)
   ) {

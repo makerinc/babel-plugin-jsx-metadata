@@ -11,6 +11,7 @@ import type {
   JSXSpreadChild,
   JSXText,
   ReturnStatement,
+  SourceLocation,
 } from "@babel/types";
 
 type JSXChild =
@@ -19,6 +20,67 @@ type JSXChild =
   | JSXExpressionContainer
   | JSXFragment
   | JSXSpreadChild;
+
+function createLineAttributes(node: {
+  loc?: SourceLocation | null;
+}): JSXAttribute[] {
+  const attributes: JSXAttribute[] = [];
+  const startLine = node.loc?.start.line;
+  const endLine = node.loc?.end.line;
+
+  if (startLine) {
+    attributes.push(
+      t.jsxAttribute(
+        t.jsxIdentifier("data-component-line-start"),
+        t.stringLiteral(startLine.toString()),
+      ),
+    );
+  }
+  if (endLine) {
+    attributes.push(
+      t.jsxAttribute(
+        t.jsxIdentifier("data-component-line-end"),
+        t.stringLiteral(endLine.toString()),
+      ),
+    );
+  }
+  return attributes;
+}
+
+function createComponentAttributes(
+  filename: string,
+  componentName: string,
+  node: { loc?: SourceLocation | null },
+): JSXAttribute[] {
+  const attributes = [
+    t.jsxAttribute(
+      t.jsxIdentifier("data-component-file"),
+      t.stringLiteral(filename),
+    ),
+    t.jsxAttribute(
+      t.jsxIdentifier("data-component-name"),
+      t.stringLiteral(componentName),
+    ),
+  ];
+
+  attributes.push(...createLineAttributes(node));
+  return attributes;
+}
+
+function createRenderedByAttributes(
+  filename: string,
+  node: { loc?: SourceLocation | null },
+): JSXAttribute[] {
+  const attributes = [
+    t.jsxAttribute(
+      t.jsxIdentifier("data-rendered-by"),
+      t.stringLiteral(filename),
+    ),
+  ];
+
+  attributes.push(...createLineAttributes(node));
+  return attributes;
+}
 
 function getComponentName(path: NodePath): string | null {
   if (
@@ -176,61 +238,14 @@ function addEditorMetadata(
   );
 
   if (!hasDataFile) {
-    const startLine = jsxElement.loc?.start.line;
-    const endLine = jsxElement.loc?.end.line;
-
     if (isRoot) {
       openingElement.attributes.push(
-        t.jsxAttribute(
-          t.jsxIdentifier("data-component-file"),
-          t.stringLiteral(filename),
-        ),
+        ...createComponentAttributes(filename, componentName, jsxElement),
       );
-      openingElement.attributes.push(
-        t.jsxAttribute(
-          t.jsxIdentifier("data-component-name"),
-          t.stringLiteral(componentName),
-        ),
-      );
-      if (startLine) {
-        openingElement.attributes.push(
-          t.jsxAttribute(
-            t.jsxIdentifier("data-component-line-start"),
-            t.stringLiteral(startLine.toString()),
-          ),
-        );
-      }
-      if (endLine) {
-        openingElement.attributes.push(
-          t.jsxAttribute(
-            t.jsxIdentifier("data-component-line-end"),
-            t.stringLiteral(endLine.toString()),
-          ),
-        );
-      }
     } else {
       openingElement.attributes.push(
-        t.jsxAttribute(
-          t.jsxIdentifier("data-rendered-by"),
-          t.stringLiteral(filename),
-        ),
+        ...createRenderedByAttributes(filename, jsxElement),
       );
-      if (startLine) {
-        openingElement.attributes.push(
-          t.jsxAttribute(
-            t.jsxIdentifier("data-component-line-start"),
-            t.stringLiteral(startLine.toString()),
-          ),
-        );
-      }
-      if (endLine) {
-        openingElement.attributes.push(
-          t.jsxAttribute(
-            t.jsxIdentifier("data-component-line-end"),
-            t.stringLiteral(endLine.toString()),
-          ),
-        );
-      }
     }
   }
 }
@@ -263,30 +278,9 @@ function processJSXChildren(
     if (t.isJSXElement(child)) {
       if (!isReactComponent(child)) {
         // HTML elements: just add data-rendered-by attribute, no text wrapping
-        const startLine = child.loc?.start.line;
-        const endLine = child.loc?.end.line;
         child.openingElement.attributes.push(
-          t.jsxAttribute(
-            t.jsxIdentifier("data-rendered-by"),
-            t.stringLiteral(filename),
-          ),
+          ...createRenderedByAttributes(filename, child),
         );
-        if (startLine) {
-          child.openingElement.attributes.push(
-            t.jsxAttribute(
-              t.jsxIdentifier("data-component-line-start"),
-              t.stringLiteral(startLine.toString()),
-            ),
-          );
-        }
-        if (endLine) {
-          child.openingElement.attributes.push(
-            t.jsxAttribute(
-              t.jsxIdentifier("data-component-line-end"),
-              t.stringLiteral(endLine.toString()),
-            ),
-          );
-        }
         processJSXChildren(child, filename, false);
       } else {
         // React components: process their children with text wrapping enabled
@@ -297,31 +291,7 @@ function processJSXChildren(
       const textContent = child.value.trim();
       if (textContent && wrapExpressions) {
         // Only wrap text when we're inside a React component (wrapExpressions = true)
-        const startLine = child.loc?.start.line;
-        const endLine = child.loc?.end.line;
-        const attributes = [
-          t.jsxAttribute(
-            t.jsxIdentifier("data-rendered-by"),
-            t.stringLiteral(filename),
-          ),
-        ];
-
-        if (startLine) {
-          attributes.push(
-            t.jsxAttribute(
-              t.jsxIdentifier("data-component-line-start"),
-              t.stringLiteral(startLine.toString()),
-            ),
-          );
-        }
-        if (endLine) {
-          attributes.push(
-            t.jsxAttribute(
-              t.jsxIdentifier("data-component-line-end"),
-              t.stringLiteral(endLine.toString()),
-            ),
-          );
-        }
+        const attributes = createRenderedByAttributes(filename, child);
 
         const wrappedTextElement = t.jsxElement(
           t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),
@@ -341,31 +311,7 @@ function processJSXChildren(
       ) {
         processedChildren.push(child);
       } else if (t.isIdentifier(child.expression)) {
-        const startLine = child.loc?.start.line;
-        const endLine = child.loc?.end.line;
-        const attributes = [
-          t.jsxAttribute(
-            t.jsxIdentifier("data-rendered-by"),
-            t.stringLiteral(filename),
-          ),
-        ];
-
-        if (startLine) {
-          attributes.push(
-            t.jsxAttribute(
-              t.jsxIdentifier("data-component-line-start"),
-              t.stringLiteral(startLine.toString()),
-            ),
-          );
-        }
-        if (endLine) {
-          attributes.push(
-            t.jsxAttribute(
-              t.jsxIdentifier("data-component-line-end"),
-              t.stringLiteral(endLine.toString()),
-            ),
-          );
-        }
+        const attributes = createRenderedByAttributes(filename, child);
 
         const wrappedExpressionElement = t.jsxElement(
           t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),

@@ -4,6 +4,13 @@
   "description": "Babel plugin that injects metadata into JSX elements for visual editor integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -18,12 +25,8 @@
     "plugin",
     "jsx",
     "metadata",
-    "react",
-    "visual-editor",
-    "component-tracking",
-    "authorship"
+    "react"
   ],
-  "author": "Your Name",
   "license": "MIT",
   "files": [
     "dist",

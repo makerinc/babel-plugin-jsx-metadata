@@ -69,3 +69,14 @@ export function getAttributes(
 
   return attributes;
 }
+
+export function extractDataEditorIds(transformedCode: string): string[] {
+  const regex = /data-editor-id="([^"]+)"/g;
+  const ids: string[] = [];
+  let match: RegExpExecArray | null = null;
+  // biome-ignore lint/suspicious/noAssignInExpressions::
+  while ((match = regex.exec(transformedCode)) !== null) {
+    ids.push(match[1]);
+  }
+  return ids;
+}

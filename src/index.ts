@@ -1,4 +1,5 @@
 import type { ConfigAPI } from "@babel/core";
+import crypto from "node:crypto";
 import type { NodePath } from "@babel/traverse";
 import { type PluginObj, types as t } from "@babel/core";
 import type {
@@ -11,7 +12,6 @@ import type {
   JSXSpreadChild,
   JSXText,
   ReturnStatement,
-  SourceLocation,
 } from "@babel/types";
 
 type JSXChild =
@@ -21,14 +21,54 @@ type JSXChild =
   | JSXFragment
   | JSXSpreadChild;
 
-function createLineAttributes(node: {
-  loc?: SourceLocation | null;
-}): JSXAttribute[] {
+type JSXElementLike = JSXElement | JSXText | JSXExpressionContainer;
+
+let elementCounter = 0;
+function resetElementCounter() {
+  elementCounter = 0;
+}
+
+function getNextElementId(elementType: string, filename: string): string {
+  return `${elementType}[${elementCounter++}]@${filename}`;
+}
+
+function getElementType(jsxChild: JSXElementLike): string {
+  if (t.isJSXElement(jsxChild)) {
+    if (t.isJSXIdentifier(jsxChild.openingElement.name)) {
+      return jsxChild.openingElement.name.name;
+    }
+  }
+  if (t.isJSXText(jsxChild) || t.isJSXExpressionContainer(jsxChild)) {
+    return "span";
+  }
+  return "unknown";
+}
+
+function createLineAttributes(
+  jsxElement: JSXElementLike,
+  filename: string,
+): JSXAttribute[] {
   const attributes: JSXAttribute[] = [];
-  const startLine = node.loc?.start.line;
-  const endLine = node.loc?.end.line;
-  const startColumn = node.loc?.start.column;
-  const endColumn = node.loc?.end.column;
+  const startLine = jsxElement.loc?.start.line;
+  const endLine = jsxElement.loc?.end.line;
+  const startColumn = jsxElement.loc?.start.column;
+  const endColumn = jsxElement.loc?.end.column;
+
+  const elementType = getElementType(jsxElement);
+  const internalId = getNextElementId(elementType, filename);
+
+  const editorId = crypto
+    .createHash("md5")
+    .update(internalId)
+    .digest("hex")
+    .substring(0, 12);
+
+  attributes.push(
+    t.jsxAttribute(
+      t.jsxIdentifier("data-editor-id"),
+      t.stringLiteral(editorId),
+    ),
+  );
 
   if (startLine) {
     attributes.push(
@@ -68,7 +108,7 @@ function createLineAttributes(node: {
 function createComponentAttributes(
   filename: string,
   componentName: string,
-  node: { loc?: SourceLocation | null },
+  jsxElement: JSXElement,
 ): JSXAttribute[] {
   const attributes = [
     t.jsxAttribute(
@@ -81,13 +121,13 @@ function createComponentAttributes(
     ),
   ];
 
-  attributes.push(...createLineAttributes(node));
+  attributes.push(...createLineAttributes(jsxElement, filename));
   return attributes;
 }
 
 function createRenderedByAttributes(
   filename: string,
-  node: { loc?: SourceLocation | null },
+  jsxElement: JSXElementLike,
 ): JSXAttribute[] {
   const attributes = [
     t.jsxAttribute(
@@ -96,7 +136,7 @@ function createRenderedByAttributes(
     ),
   ];
 
-  attributes.push(...createLineAttributes(node));
+  attributes.push(...createLineAttributes(jsxElement, filename));
   return attributes;
 }
 
@@ -167,6 +207,7 @@ function processComponent(
   componentName: string,
   filename: string,
 ): void {
+  resetElementCounter();
   // Handle function declarations: function Button() { return <jsx> }
   if (path.isFunctionDeclaration()) {
     path.traverse({

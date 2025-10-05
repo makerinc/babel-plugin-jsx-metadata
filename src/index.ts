@@ -23,27 +23,12 @@ type JSXChild =
 
 type JSXElementLike = JSXElement | JSXText | JSXExpressionContainer;
 
-let elementCounter = 0;
-let elementPath: string[] = [];
-
-function resetElementCounter() {
-  elementCounter = 0;
-  elementPath = [];
-}
-
-function pushElementToPath(elementName: string) {
-  elementPath.push(elementName);
-}
-
-function popElementFromPath() {
-  elementPath.pop();
-}
-
-function getNextElementId(filename: string): string {
-  // Include parent tags in path, but use generic 'element' for current item
-  const pathStr = elementPath.length > 0 ? elementPath.join('.') + '.element' : 'element';
-  return `${pathStr}[${elementCounter++}]@${filename}`;
-}
+type IdGenerationContext = {
+  filename: string;
+  usedIds: Set<string>;
+  elementCounter: number;
+  elementPath: string[];
+};
 
 function getElementTagName(jsxElement: JSXElementLike): string {
   if (t.isJSXElement(jsxElement)) {
@@ -55,6 +40,61 @@ function getElementTagName(jsxElement: JSXElementLike): string {
     return "span";
   }
   return "unknown";
+}
+
+function assignElementId(
+  openingElement: JSXOpeningElement,
+  context: IdGenerationContext
+): void {
+  // Find existing ID attribute
+  const existingIdAttr = openingElement.attributes.find(
+    (attr): attr is JSXAttribute =>
+      t.isJSXAttribute(attr) &&
+      t.isJSXIdentifier(attr.name) &&
+      attr.name.name === "data-editor-id"
+  );
+
+  let finalId: string;
+
+  if (existingIdAttr && t.isStringLiteral(existingIdAttr.value)) {
+    const existingId = existingIdAttr.value.value;
+    
+    // Keep existing ID if it's valid and not already used
+    if (existingId && existingId.trim() !== "" && !context.usedIds.has(existingId)) {
+      finalId = existingId;
+    } else {
+      // Generate new ID due to empty value or collision
+      finalId = generateNewId(context);
+    }
+  } else {
+    // No existing ID, generate new one
+    finalId = generateNewId(context);
+  }
+
+  // Track this ID as used
+  context.usedIds.add(finalId);
+
+  // Set or update the attribute
+  setOrUpdateAttribute(openingElement, "data-editor-id", finalId);
+}
+
+function generateNewId(context: IdGenerationContext): string {
+  let newId: string;
+  
+  do {
+    const pathStr = context.elementPath.length > 0 
+      ? context.elementPath.join('.') + '.element' 
+      : 'element';
+    const internalId = `${pathStr}[${context.elementCounter++}]@${context.filename}`;
+    
+    newId = crypto
+      .createHash("md5")
+      .update(internalId)
+      .digest("hex")
+      .substring(0, 12);
+  } while (context.usedIds.has(newId));
+  
+  return newId;
 }
 
 
@@ -85,58 +125,25 @@ function setOrUpdateAttribute(
   }
 }
 
-function addLineAttributes(
-  openingElement: JSXOpeningElement,
-  jsxElement: JSXElementLike,
-  filename: string,
-): void {
-  const startLine = jsxElement.loc?.start.line;
-  const endLine = jsxElement.loc?.end.line;
-  const startColumn = jsxElement.loc?.start.column;
-  const endColumn = jsxElement.loc?.end.column;
-
-  const internalId = getNextElementId(filename);
-
-  const editorId = crypto
-    .createHash("md5")
-    .update(internalId)
-    .digest("hex")
-    .substring(0, 12);
-
-  setOrUpdateAttribute(openingElement, "data-editor-id", editorId);
-
-  if (startLine) {
-    setOrUpdateAttribute(openingElement, "data-component-line-start", startLine.toString());
-  }
-  if (endLine) {
-    setOrUpdateAttribute(openingElement, "data-component-line-end", endLine.toString());
-  }
-  if (startColumn !== undefined) {
-    setOrUpdateAttribute(openingElement, "data-component-col-start", startColumn.toString());
-  }
-  if (endColumn !== undefined) {
-    setOrUpdateAttribute(openingElement, "data-component-col-end", endColumn.toString());
-  }
-}
 
 function addComponentAttributes(
   openingElement: JSXOpeningElement,
   filename: string,
   componentName: string,
-  jsxElement: JSXElement,
+  context: IdGenerationContext,
 ): void {
   setOrUpdateAttribute(openingElement, "data-component-file", filename);
   setOrUpdateAttribute(openingElement, "data-component-name", componentName);
-  addLineAttributes(openingElement, jsxElement, filename);
+  assignElementId(openingElement, context);
 }
 
 function addRenderedByAttributes(
   openingElement: JSXOpeningElement,
   filename: string,
-  jsxElement: JSXElementLike,
+  context: IdGenerationContext,
 ): void {
   setOrUpdateAttribute(openingElement, "data-rendered-by", filename);
-  addLineAttributes(openingElement, jsxElement, filename);
+  assignElementId(openingElement, context);
 }
 
 function getComponentName(path: NodePath): string | null {
@@ -206,12 +213,18 @@ function processComponent(
   componentName: string,
   filename: string,
 ): void {
-  resetElementCounter();
+  // Create context for this component
+  const context: IdGenerationContext = {
+    filename,
+    usedIds: new Set<string>(),
+    elementCounter: 0,
+    elementPath: []
+  };
   // Handle function declarations: function Button() { return <jsx> }
   if (path.isFunctionDeclaration()) {
     path.traverse({
       ReturnStatement(returnPath: NodePath<ReturnStatement>) {
-        processComponentReturn(returnPath, filename, componentName);
+        processComponentReturn(returnPath, filename, componentName, context);
       },
     });
   }
@@ -223,16 +236,16 @@ function processComponent(
     if (t.isArrowFunctionExpression(func)) {
       // Direct return: const Button = () => <jsx>
       if (t.isJSXElement(func.body)) {
-        addEditorMetadata(func.body, filename, componentName, true);
-        processJSXChildren(func.body, filename, false); // Root element: no text wrapping
+        addEditorMetadata(func.body, filename, componentName, true, context);
+        processJSXChildren(func.body, filename, false, context); // Root element: no text wrapping
       } else if (t.isJSXFragment(func.body)) {
-        addEditorMetadataToFragmentChildren(func.body, filename, componentName);
-        addRenderedByToFragmentChildren(func.body, filename);
+        addEditorMetadataToFragmentChildren(func.body, filename, componentName, context);
+        addRenderedByToFragmentChildren(func.body, filename, context);
       } else if (t.isCallExpression(func.body)) {
         const jsxElement = convertCreateElementToJSX(func.body);
         if (jsxElement) {
-          addEditorMetadata(jsxElement, filename, componentName, true);
-          processJSXChildren(jsxElement, filename, false); // Root element: no text wrapping
+          addEditorMetadata(jsxElement, filename, componentName, true, context);
+          processJSXChildren(jsxElement, filename, false, context); // Root element: no text wrapping
           func.body = jsxElement;
         }
       }
@@ -240,7 +253,7 @@ function processComponent(
       else if (t.isBlockStatement(func.body)) {
         path.traverse({
           ReturnStatement(returnPath: NodePath<ReturnStatement>) {
-            processComponentReturn(returnPath, filename, componentName);
+            processComponentReturn(returnPath, filename, componentName, context);
           },
         });
       }
@@ -249,7 +262,7 @@ function processComponent(
     if (t.isFunctionExpression(func)) {
       path.traverse({
         ReturnStatement(returnPath: NodePath<ReturnStatement>) {
-          processComponentReturn(returnPath, filename, componentName);
+          processComponentReturn(returnPath, filename, componentName, context);
         },
       });
     }
@@ -260,20 +273,21 @@ function processComponentReturn(
   returnPath: NodePath<ReturnStatement>,
   filename: string,
   componentName: string,
+  context: IdGenerationContext,
 ): void {
   const argument = returnPath.node.argument;
 
   if (t.isJSXElement(argument)) {
-    addEditorMetadata(argument, filename, componentName, true);
-    processJSXChildren(argument, filename, false); // Root element: no text wrapping
+    addEditorMetadata(argument, filename, componentName, true, context);
+    processJSXChildren(argument, filename, false, context); // Root element: no text wrapping
   } else if (t.isJSXFragment(argument)) {
-    addEditorMetadataToFragmentChildren(argument, filename, componentName);
-    addRenderedByToFragmentChildren(argument, filename);
+    addEditorMetadataToFragmentChildren(argument, filename, componentName, context);
+    addRenderedByToFragmentChildren(argument, filename, context);
   } else if (t.isCallExpression(argument)) {
     const jsxElement = convertCreateElementToJSX(argument);
     if (jsxElement) {
-      addEditorMetadata(jsxElement, filename, componentName, true);
-      processJSXChildren(jsxElement, filename, false); // Root element: no text wrapping
+      addEditorMetadata(jsxElement, filename, componentName, true, context);
+      processJSXChildren(jsxElement, filename, false, context); // Root element: no text wrapping
       returnPath.node.argument = jsxElement;
     }
   }
@@ -284,6 +298,7 @@ function addEditorMetadata(
   filename: string,
   componentName: string,
   isRoot = false,
+  context: IdGenerationContext,
 ): void {
   if (!filename) return;
 
@@ -291,10 +306,10 @@ function addEditorMetadata(
 
   if (isRoot) {
     // Always update/add component attributes (replace old with new)
-    addComponentAttributes(openingElement, filename, componentName, jsxElement);
+    addComponentAttributes(openingElement, filename, componentName, context);
   } else {
     // Always update/add rendered-by attributes (replace old with new)
-    addRenderedByAttributes(openingElement, filename, jsxElement);
+    addRenderedByAttributes(openingElement, filename, context);
   }
 }
 
@@ -302,12 +317,13 @@ function addEditorMetadataToFragmentChildren(
   jsxFragment: JSXFragment,
   filename: string,
   componentName: string,
+  context: IdGenerationContext,
 ): void {
   if (!filename || !jsxFragment.children) return;
 
   jsxFragment.children.forEach((child) => {
     if (t.isJSXElement(child)) {
-      addEditorMetadata(child, filename, componentName, true);
+      addEditorMetadata(child, filename, componentName, true, context);
     }
   });
 }
@@ -316,12 +332,13 @@ function processJSXChildren(
   jsxElement: JSXElement,
   filename: string,
   wrapExpressions = false,
+  context: IdGenerationContext,
 ): void {
   if (!jsxElement.children) return;
 
   // Push current element to path before processing children
   const currentTagName = getElementTagName(jsxElement);
-  pushElementToPath(currentTagName);
+  context.elementPath.push(currentTagName);
 
   const processedChildren: JSXChild[] = [];
   let hasChanges = false;
@@ -330,11 +347,11 @@ function processJSXChildren(
     if (t.isJSXElement(child)) {
       if (!isReactComponent(child)) {
         // HTML elements: just add data-rendered-by attribute, no text wrapping
-        addRenderedByAttributes(child.openingElement, filename, child);
-        processJSXChildren(child, filename, false);
+        addRenderedByAttributes(child.openingElement, filename, context);
+        processJSXChildren(child, filename, false, context);
       } else {
         // React components: process their children with text wrapping enabled
-        processJSXChildren(child, filename, true);
+        processJSXChildren(child, filename, true, context);
       }
       processedChildren.push(child);
     } else if (t.isJSXText(child)) {
@@ -342,7 +359,7 @@ function processJSXChildren(
       if (textContent && wrapExpressions) {
         // Only wrap text when we're inside a React component (wrapExpressions = true)
         const spanOpeningElement = t.jsxOpeningElement(t.jsxIdentifier("span"), []);
-        addRenderedByAttributes(spanOpeningElement, filename, child);
+        addRenderedByAttributes(spanOpeningElement, filename, context);
 
         const wrappedTextElement = t.jsxElement(
           spanOpeningElement,
@@ -357,7 +374,7 @@ function processJSXChildren(
     } else if (t.isJSXExpressionContainer(child) && wrapExpressions) {
       if (t.isIdentifier(child.expression)) {
         const spanOpeningElement = t.jsxOpeningElement(t.jsxIdentifier("span"), []);
-        addRenderedByAttributes(spanOpeningElement, filename, child);
+        addRenderedByAttributes(spanOpeningElement, filename, context);
 
         const wrappedExpressionElement = t.jsxElement(
           spanOpeningElement,
@@ -375,7 +392,7 @@ function processJSXChildren(
   });
 
   // Pop current element from path after processing children
-  popElementFromPath();
+  context.elementPath.pop();
 
   if (hasChanges) {
     jsxElement.children = processedChildren;
@@ -385,12 +402,13 @@ function processJSXChildren(
 function addRenderedByToFragmentChildren(
   jsxFragment: JSXFragment,
   filename: string,
+  context: IdGenerationContext,
 ): void {
   if (!jsxFragment.children) return;
 
   jsxFragment.children.forEach((child) => {
     if (t.isJSXElement(child)) {
-      processJSXChildren(child, filename);
+      processJSXChildren(child, filename, false, context);
     }
   });
 }

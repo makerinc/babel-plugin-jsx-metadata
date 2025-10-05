@@ -42,7 +42,7 @@ describe("Attribute Deduplication", () => {
     expect(componentNameCount).toBe(1);
   });
 
-  test("should update existing data-editor-id instead of duplicating", () => {
+  test("should preserve existing unique data-editor-id instead of duplicating", () => {
     const input = `
       function Button() {
         return <button data-editor-id="old-id-123">Click me</button>;
@@ -52,9 +52,8 @@ describe("Attribute Deduplication", () => {
     const output = transform(input, "test.js");
     const buttonAttrs = getAttributes(output, "button");
 
-    // Should have a new editor ID (12-char hex)
-    expect(buttonAttrs["data-editor-id"]).toMatch(/^[a-f0-9]{12}$/);
-    expect(buttonAttrs["data-editor-id"]).not.toBe("old-id-123");
+    // Should preserve the existing unique ID
+    expect(buttonAttrs["data-editor-id"]).toBe("old-id-123");
     
     // Should only appear once in the output
     const editorIdCount = (output.match(/data-editor-id=/g) || []).length;
@@ -93,8 +92,6 @@ describe("Attribute Deduplication", () => {
             data-component-file="old.js"
             data-component-name="OldCard"
             data-editor-id="old-id"
-            data-component-line-start="999"
-            data-component-line-end="999"
           >
             Content
           </div>
@@ -108,18 +105,13 @@ describe("Attribute Deduplication", () => {
     // All attributes should be updated with new values
     expect(divAttrs["data-component-file"]).toBe("new-card.js");
     expect(divAttrs["data-component-name"]).toBe("Card");
-    expect(divAttrs["data-editor-id"]).toMatch(/^[a-f0-9]{12}$/);
-    expect(divAttrs["data-editor-id"]).not.toBe("old-id");
-    expect(divAttrs["data-component-line-start"]).not.toBe("999");
-    expect(divAttrs["data-component-line-end"]).not.toBe("999");
+    expect(divAttrs["data-editor-id"]).toBe("old-id"); // Preserved since it's unique
 
     // No attributes should be duplicated
     const attributeNames = [
       "data-component-file",
       "data-component-name", 
-      "data-editor-id",
-      "data-component-line-start",
-      "data-component-line-end"
+      "data-editor-id"
     ];
 
     for (const attrName of attributeNames) {
@@ -147,11 +139,10 @@ describe("Attribute Deduplication", () => {
     expect(sectionAttrs["data-component-name"]).toBe("Widget");
     expect(sectionAttrs["data-editor-id"]).toMatch(/^[a-f0-9]{12}$/);
     
-    // P (non-root) should have updated rendered-by and editor-id (deduplication!)
+    // P (non-root) should have updated rendered-by and preserved unique editor-id
     const pAttrs = getAttributes(output, "p");
     expect(pAttrs["data-rendered-by"]).toBe("widget.js");
-    expect(pAttrs["data-editor-id"]).toMatch(/^[a-f0-9]{12}$/);
-    expect(pAttrs["data-editor-id"]).not.toBe("old-id");
+    expect(pAttrs["data-editor-id"]).toBe("old-id"); // Preserved since it's unique
     
     // Should only have one of each attribute (no duplicates)
     const pMatch = output.match(/<p[^>]*>/);
@@ -178,8 +169,7 @@ describe("Attribute Deduplication", () => {
     // Should add new component metadata since no data-component-file exists
     expect(buttonAttrs["data-component-file"]).toBe("button.js");
     expect(buttonAttrs["data-component-name"]).toBe("Button");
-    expect(buttonAttrs["data-editor-id"]).toMatch(/^[a-f0-9]{12}$/);
-    expect(buttonAttrs["data-editor-id"]).not.toBe("should-be-updated");
+    expect(buttonAttrs["data-editor-id"]).toBe("should-be-updated"); // Preserved since it's unique
     
     // Should only appear once in the output (no duplicates)
     const editorIdCount = (output.match(/data-editor-id=/g) || []).length;

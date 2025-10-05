@@ -9,8 +9,10 @@ export function transform(
   filename = "test.js",
   options: options = {},
 ) {
+  const pluginOptions = { ...options, filename };
+  
   const result = transformSync(code, {
-    plugins: [[plugin, { ...options, filename }]],
+    plugins: [[plugin, pluginOptions]],
     parserOpts: {
       plugins: ["jsx", "typescript"],
     },

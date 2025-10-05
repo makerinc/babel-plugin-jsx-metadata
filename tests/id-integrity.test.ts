@@ -70,7 +70,7 @@ describe("ID Integrity Tests", () => {
     expect(ids1).toEqual(ids2);
   });
 
-  test("should generate different IDs for different element types at same position", () => {
+  test("should generate same IDs for different element types at same position", () => {
     const code1 = `
       function Component() {
         return (
@@ -99,8 +99,8 @@ describe("ID Integrity Tests", () => {
     const ids1 = extractDataEditorIds(transformed1);
     const ids2 = extractDataEditorIds(transformed2);
 
-    // Should have different IDs because different element types
-    expect(ids1).not.toEqual(ids2);
+    // Should have same IDs because they're at the same positions (tag-agnostic)
+    expect(ids1).toEqual(ids2);
     // Should be proper 12-char hex hashes
     for (const id of [...ids1, ...ids2]) {
       expect(id).toMatch(/^[a-f0-9]{12}$/);
@@ -133,6 +133,92 @@ describe("ID Integrity Tests", () => {
     for (const id of ids1) {
       expect(id).toMatch(/^[a-f0-9]{12}$/);
     }
+  });
+
+  test("should preserve IDs when leaf element tags are swapped", () => {
+    const code1 = `
+      function Component() {
+        return (
+          <div>
+            <section>
+              <span>Target element</span>
+            </section>
+          </div>
+        );
+      }
+    `;
+
+    const code2 = `
+      function Component() {
+        return (
+          <div>
+            <section>
+              <a>Target element</a>
+            </section>
+          </div>
+        );
+      }
+    `;
+
+    const transformed1 = transform(code1, filename);
+    const transformed2 = transform(code2, filename);
+
+    const ids1 = extractDataEditorIds(transformed1);
+    const ids2 = extractDataEditorIds(transformed2);
+
+    // Leaf element tag swap (span → a) should preserve all IDs
+    expect(ids1).toEqual(ids2);
+    
+    // Should have 3 elements: div, section, span/a
+    expect(ids1).toHaveLength(3);
+  });
+
+  test("should generate different IDs when parent element tags are swapped", () => {
+    const code1 = `
+      function Component() {
+        return (
+          <div>
+            <section>
+              <span>Target element</span>
+            </section>
+          </div>
+        );
+      }
+    `;
+
+    const code2 = `
+      function Component() {
+        return (
+          <div>
+            <article>
+              <span>Target element</span>
+            </article>
+          </div>
+        );
+      }
+    `;
+
+    const transformed1 = transform(code1, filename);
+    const transformed2 = transform(code2, filename);
+
+    const ids1 = extractDataEditorIds(transformed1);
+    const ids2 = extractDataEditorIds(transformed2);
+
+    // Parent element tag swap (section → article) should change IDs
+    expect(ids1).not.toEqual(ids2);
+    
+    // Should have same number of elements
+    expect(ids1).toHaveLength(3);
+    expect(ids2).toHaveLength(3);
+    
+    // Root div should have same ID (same position, same parent path)
+    expect(ids1[0]).toBe(ids2[0]);
+    
+    // section/article should have same ID (same position, same parent path)
+    expect(ids1[1]).toBe(ids2[1]);
+    
+    // But nested span should have different IDs (different parent path: div.section vs div.article)
+    expect(ids1[2]).not.toBe(ids2[2]);
   });
 
   test("should generate different IDs for different files", () => {

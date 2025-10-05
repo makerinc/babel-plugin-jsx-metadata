@@ -24,38 +24,78 @@ type JSXChild =
 type JSXElementLike = JSXElement | JSXText | JSXExpressionContainer;
 
 let elementCounter = 0;
+let elementPath: string[] = [];
+
 function resetElementCounter() {
   elementCounter = 0;
+  elementPath = [];
 }
 
-function getNextElementId(elementType: string, filename: string): string {
-  return `${elementType}[${elementCounter++}]@${filename}`;
+function pushElementToPath(elementName: string) {
+  elementPath.push(elementName);
 }
 
-function getElementType(jsxChild: JSXElementLike): string {
-  if (t.isJSXElement(jsxChild)) {
-    if (t.isJSXIdentifier(jsxChild.openingElement.name)) {
-      return jsxChild.openingElement.name.name;
+function popElementFromPath() {
+  elementPath.pop();
+}
+
+function getNextElementId(filename: string): string {
+  // Include parent tags in path, but use generic 'element' for current item
+  const pathStr = elementPath.length > 0 ? elementPath.join('.') + '.element' : 'element';
+  return `${pathStr}[${elementCounter++}]@${filename}`;
+}
+
+function getElementTagName(jsxElement: JSXElementLike): string {
+  if (t.isJSXElement(jsxElement)) {
+    if (t.isJSXIdentifier(jsxElement.openingElement.name)) {
+      return jsxElement.openingElement.name.name;
     }
   }
-  if (t.isJSXText(jsxChild) || t.isJSXExpressionContainer(jsxChild)) {
+  if (t.isJSXText(jsxElement) || t.isJSXExpressionContainer(jsxElement)) {
     return "span";
   }
   return "unknown";
 }
 
-function createLineAttributes(
+
+function setOrUpdateAttribute(
+  openingElement: JSXOpeningElement,
+  name: string,
+  value: string,
+): void {
+  // Find existing attribute
+  const existingAttrIndex = openingElement.attributes.findIndex(
+    (attr): attr is JSXAttribute =>
+      t.isJSXAttribute(attr) &&
+      t.isJSXIdentifier(attr.name) &&
+      attr.name.name === name,
+  );
+
+  const newAttribute = t.jsxAttribute(
+    t.jsxIdentifier(name),
+    t.stringLiteral(value),
+  );
+
+  if (existingAttrIndex !== -1) {
+    // Update existing attribute
+    openingElement.attributes[existingAttrIndex] = newAttribute;
+  } else {
+    // Add new attribute
+    openingElement.attributes.push(newAttribute);
+  }
+}
+
+function addLineAttributes(
+  openingElement: JSXOpeningElement,
   jsxElement: JSXElementLike,
   filename: string,
-): JSXAttribute[] {
-  const attributes: JSXAttribute[] = [];
+): void {
   const startLine = jsxElement.loc?.start.line;
   const endLine = jsxElement.loc?.end.line;
   const startColumn = jsxElement.loc?.start.column;
   const endColumn = jsxElement.loc?.end.column;
 
-  const elementType = getElementType(jsxElement);
-  const internalId = getNextElementId(elementType, filename);
+  const internalId = getNextElementId(filename);
 
   const editorId = crypto
     .createHash("md5")
@@ -63,81 +103,40 @@ function createLineAttributes(
     .digest("hex")
     .substring(0, 12);
 
-  attributes.push(
-    t.jsxAttribute(
-      t.jsxIdentifier("data-editor-id"),
-      t.stringLiteral(editorId),
-    ),
-  );
+  setOrUpdateAttribute(openingElement, "data-editor-id", editorId);
 
   if (startLine) {
-    attributes.push(
-      t.jsxAttribute(
-        t.jsxIdentifier("data-component-line-start"),
-        t.stringLiteral(startLine.toString()),
-      ),
-    );
+    setOrUpdateAttribute(openingElement, "data-component-line-start", startLine.toString());
   }
   if (endLine) {
-    attributes.push(
-      t.jsxAttribute(
-        t.jsxIdentifier("data-component-line-end"),
-        t.stringLiteral(endLine.toString()),
-      ),
-    );
+    setOrUpdateAttribute(openingElement, "data-component-line-end", endLine.toString());
   }
   if (startColumn !== undefined) {
-    attributes.push(
-      t.jsxAttribute(
-        t.jsxIdentifier("data-component-col-start"),
-        t.stringLiteral(startColumn.toString()),
-      ),
-    );
+    setOrUpdateAttribute(openingElement, "data-component-col-start", startColumn.toString());
   }
   if (endColumn !== undefined) {
-    attributes.push(
-      t.jsxAttribute(
-        t.jsxIdentifier("data-component-col-end"),
-        t.stringLiteral(endColumn.toString()),
-      ),
-    );
+    setOrUpdateAttribute(openingElement, "data-component-col-end", endColumn.toString());
   }
-  return attributes;
 }
 
-function createComponentAttributes(
+function addComponentAttributes(
+  openingElement: JSXOpeningElement,
   filename: string,
   componentName: string,
   jsxElement: JSXElement,
-): JSXAttribute[] {
-  const attributes = [
-    t.jsxAttribute(
-      t.jsxIdentifier("data-component-file"),
-      t.stringLiteral(filename),
-    ),
-    t.jsxAttribute(
-      t.jsxIdentifier("data-component-name"),
-      t.stringLiteral(componentName),
-    ),
-  ];
-
-  attributes.push(...createLineAttributes(jsxElement, filename));
-  return attributes;
+): void {
+  setOrUpdateAttribute(openingElement, "data-component-file", filename);
+  setOrUpdateAttribute(openingElement, "data-component-name", componentName);
+  addLineAttributes(openingElement, jsxElement, filename);
 }
 
-function createRenderedByAttributes(
+function addRenderedByAttributes(
+  openingElement: JSXOpeningElement,
   filename: string,
   jsxElement: JSXElementLike,
-): JSXAttribute[] {
-  const attributes = [
-    t.jsxAttribute(
-      t.jsxIdentifier("data-rendered-by"),
-      t.stringLiteral(filename),
-    ),
-  ];
-
-  attributes.push(...createLineAttributes(jsxElement, filename));
-  return attributes;
+): void {
+  setOrUpdateAttribute(openingElement, "data-rendered-by", filename);
+  addLineAttributes(openingElement, jsxElement, filename);
 }
 
 function getComponentName(path: NodePath): string | null {
@@ -289,23 +288,13 @@ function addEditorMetadata(
   if (!filename) return;
 
   const openingElement: JSXOpeningElement = jsxElement.openingElement;
-  const hasDataFile = openingElement.attributes.find(
-    (attr): attr is JSXAttribute =>
-      t.isJSXAttribute(attr) &&
-      t.isJSXIdentifier(attr.name) &&
-      attr.name.name === "data-component-file",
-  );
 
-  if (!hasDataFile) {
-    if (isRoot) {
-      openingElement.attributes.push(
-        ...createComponentAttributes(filename, componentName, jsxElement),
-      );
-    } else {
-      openingElement.attributes.push(
-        ...createRenderedByAttributes(filename, jsxElement),
-      );
-    }
+  if (isRoot) {
+    // Always update/add component attributes (replace old with new)
+    addComponentAttributes(openingElement, filename, componentName, jsxElement);
+  } else {
+    // Always update/add rendered-by attributes (replace old with new)
+    addRenderedByAttributes(openingElement, filename, jsxElement);
   }
 }
 
@@ -330,6 +319,10 @@ function processJSXChildren(
 ): void {
   if (!jsxElement.children) return;
 
+  // Push current element to path before processing children
+  const currentTagName = getElementTagName(jsxElement);
+  pushElementToPath(currentTagName);
+
   const processedChildren: JSXChild[] = [];
   let hasChanges = false;
 
@@ -337,9 +330,7 @@ function processJSXChildren(
     if (t.isJSXElement(child)) {
       if (!isReactComponent(child)) {
         // HTML elements: just add data-rendered-by attribute, no text wrapping
-        child.openingElement.attributes.push(
-          ...createRenderedByAttributes(filename, child),
-        );
+        addRenderedByAttributes(child.openingElement, filename, child);
         processJSXChildren(child, filename, false);
       } else {
         // React components: process their children with text wrapping enabled
@@ -350,10 +341,11 @@ function processJSXChildren(
       const textContent = child.value.trim();
       if (textContent && wrapExpressions) {
         // Only wrap text when we're inside a React component (wrapExpressions = true)
-        const attributes = createRenderedByAttributes(filename, child);
+        const spanOpeningElement = t.jsxOpeningElement(t.jsxIdentifier("span"), []);
+        addRenderedByAttributes(spanOpeningElement, filename, child);
 
         const wrappedTextElement = t.jsxElement(
-          t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),
+          spanOpeningElement,
           t.jsxClosingElement(t.jsxIdentifier("span")),
           [child],
         );
@@ -364,10 +356,11 @@ function processJSXChildren(
       }
     } else if (t.isJSXExpressionContainer(child) && wrapExpressions) {
       if (t.isIdentifier(child.expression)) {
-        const attributes = createRenderedByAttributes(filename, child);
+        const spanOpeningElement = t.jsxOpeningElement(t.jsxIdentifier("span"), []);
+        addRenderedByAttributes(spanOpeningElement, filename, child);
 
         const wrappedExpressionElement = t.jsxElement(
-          t.jsxOpeningElement(t.jsxIdentifier("span"), attributes),
+          spanOpeningElement,
           t.jsxClosingElement(t.jsxIdentifier("span")),
           [child],
         );
@@ -380,6 +373,9 @@ function processJSXChildren(
       processedChildren.push(child);
     }
   });
+
+  // Pop current element from path after processing children
+  popElementFromPath();
 
   if (hasChanges) {
     jsxElement.children = processedChildren;

@@ -48,12 +48,13 @@ describe("Edge Cases", () => {
     expect(output).not.toContain("data-rendered-by");
   });
 
-  test("should not modify elements that already have data-component-file", () => {
+  test("should update existing data-component-file with new values", () => {
     const output = transform(existingDataFileInput, "src/New.js");
 
-    // Should keep existing data-component-file and not add new attributes
-    expect(output).toContain('data-component-file="existing.js"');
-    expect(output).not.toContain('data-component-file="src/New.js"');
-    expect(output).not.toContain("data-editor-id");
+    // Should update existing data-component-file with new value
+    expect(output).not.toContain('data-component-file="existing.js"');
+    expect(output).toContain('data-component-file="src/New.js"');
+    expect(output).toContain("data-editor-id");
+    expect(output).toContain("data-component-name");
   });
 });

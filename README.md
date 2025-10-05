@@ -1,6 +1,6 @@
 # Babel Plugin: JSX Metadata
 
-A Babel plugin that injects metadata into JSX elements for visual editor integration. This plugin processes JSX elements during compilation to inject data attributes that enable component tracking, authorship detection, and precise source location mapping in visual editing tools.
+A Babel plugin that injects lightweight metadata into JSX elements for visual editor integration. This plugin processes JSX elements during compilation to inject minimal data attributes that enable component tracking, authorship detection, and stable element identification in visual editing tools.
 
 ## Installation
 
@@ -39,17 +39,11 @@ For each JSX component, the plugin:
 1. **Adds component metadata** to root elements:
    - `data-component-file`: Source file path
    - `data-component-name`: Component name (e.g., "Button", "Hero")
-   - `data-component-line-start`: Source line number where element starts
-   - `data-component-line-end`: Source line number where element ends
-   - `data-component-col-start`: Source column number where element starts
-   - `data-component-col-end`: Source column number where element ends
+   - `data-editor-id`: Stable 12-character hash for persistent element tracking
 
 2. **Adds ownership tracking** to child elements:
-   - `data-rendered-by`: File path of the authoring component
-   - `data-component-line-start`: Source line number where element starts
-   - `data-component-line-end`: Source line number where element ends
-   - `data-component-col-start`: Source column number where element starts
-   - `data-component-col-end`: Source column number where element ends
+   - `data-rendered-by`: File path of the authoring component  
+   - `data-editor-id`: Stable 12-character hash for persistent element tracking
 
 ### Text Node Wrapping
 
@@ -63,7 +57,7 @@ The plugin wraps text content in components to enable selection:
 </div>
 
 // After
-<div data-rendered-by="src/Component.js" data-component-line-start="5" data-component-line-end="7">
+<div data-rendered-by="src/Component.js" data-editor-id="7ca930b58636">
     Hello World
 </div>
 ```
@@ -74,8 +68,8 @@ The plugin wraps text content in components to enable selection:
 <Button variant="primary">Get Started Today</Button>
 
 // Button receives text from Hero and preserves authorship
-<button data-component-file="src/components/Button.js" data-component-name="Button" data-component-line-start="37" data-component-line-end="37">
-  <span data-rendered-by="src/Hero.js" data-component-line-start="37" data-component-line-end="37"> {children} </span>
+<button data-component-file="src/components/Button.js" data-component-name="Button" data-editor-id="418a66f72141">
+  <span data-rendered-by="src/Hero.js" data-editor-id="8f4207890d1b"> {children} </span>
 </button>
 ```
 
@@ -88,7 +82,7 @@ The plugin uses PascalCase detection to identify JSX components vs HTML elements
 
 - **HTML Elements** (lowercase): `div`, `button`, `span`
   - Add `data-rendered-by` pointing to the file that authored them
-  - Add `data-component-line-start`, `data-component-line-end`, `data-component-col-start`, and `data-component-col-end` with source position range
+  - Add `data-editor-id` for stable element identification
 
 ## Configuration Options
 
@@ -110,35 +104,37 @@ Array of filenames or patterns to skip processing. Defaults to `[]`.
 ### Component Root Elements
 - **`data-component-file`**: File path where the component is defined (e.g., `"src/Button.js"`)
 - **`data-component-name`**: Component name (e.g., `"Button"`, `"Hero"`)
-- **`data-component-line-start`**: Source line number where the JSX element starts
-- **`data-component-line-end`**: Source line number where the JSX element ends
-- **`data-component-col-start`**: Source column number where the JSX element starts
-- **`data-component-col-end`**: Source column number where the JSX element ends
+- **`data-editor-id`**: Stable 12-character hash for persistent element tracking (e.g., `"418a66f72141"`)
 
 ### Child Elements
 - **`data-rendered-by`**: File path of the component that authored this element
-- **`data-component-line-start`**: Source line number where the element starts
-- **`data-component-line-end`**: Source line number where the element ends
-- **`data-component-col-start`**: Source column number where the element starts
-- **`data-component-col-end`**: Source column number where the element ends
+- **`data-editor-id`**: Stable 12-character hash for persistent element tracking
 
 ### Text Spans
 Automatically wrapped text nodes get:
 - **`data-rendered-by`**: File path of the authoring component
-- **`data-component-line-start`**: Source line number where the text starts
-- **`data-component-line-end`**: Source line number where the text ends
-- **`data-component-col-start`**: Source column number where the text starts
-- **`data-component-col-end`**: Source column number where the text ends
+- **`data-editor-id`**: Stable 12-character hash for persistent element tracking
+
+## Editor ID Generation
+
+The plugin generates stable, collision-resistant IDs for each element:
+
+- **Hash-based**: Uses MD5 hash of element path and position for consistency
+- **Collision-safe**: Automatically resolves ID conflicts within the same file  
+- **Preservation**: Keeps existing unique IDs when possible to avoid unnecessary changes
+- **File-scoped**: IDs are unique within each file to prevent conflicts
+
 
 ## Visual Editor Integration
 
 The injected metadata enables:
 
-1. **Element Selection**: Click handlers use `data-component-name` to identify components
+1. **Element Selection**: Click handlers use `data-component-name` and `data-editor-id` to identify components
 2. **File Navigation**: `data-component-file` determines which file to open for editing
-3. **Precise Navigation**: `data-component-line-start`, `data-component-line-end`, `data-component-col-start`, and `data-component-col-end` enable jumping to exact source locations and selecting elements precisely, even multiple elements on the same line
+3. **Persistent Tracking**: `data-editor-id` provides stable element identification across code changes
 4. **Ownership Tracking**: `data-rendered-by` determines which file authored each element
 5. **Text Editing**: Wrapped text nodes can be selected and modified while preserving authorship
+6. **Collision-free Editing**: Hash-based IDs prevent conflicts when multiple editors work simultaneously
 
 ## API Reference
 
@@ -154,10 +150,10 @@ function componentDataPlugin(
 ## Limitations
 
 1. Only processes direct JSX returns from components
-2. PascalCase detection may miss edge cases
+2. PascalCase detection may miss edge cases  
 3. Adds spans that could affect styling
-4. Line numbers depend on source maps for accuracy in complex build setups
-5. Cross-component text authorship requires careful `{children}` handling
+4. Cross-component text authorship requires careful `{children}` handling
+5. IDs are generated deterministically but may change if element structure changes significantly
 
 ## Development
 

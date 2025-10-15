@@ -1,11 +1,7 @@
 import type { ConfigAPI } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 import { type PluginObj, types as t } from "@babel/core";
-import type {
-  JSXElement,
-  JSXOpeningElement,
-  JSXAttribute,
-} from "@babel/types";
+import type { JSXElement, JSXAttribute } from "@babel/types";
 
 export type BridgeOptions = {
   filename?: string;
@@ -35,7 +31,7 @@ function attachBridgePlugin(
     visitor: {
       JSXElement(path: NodePath) {
         const jsxElement = path.node as JSXElement;
-        
+
         if (isHTMLElement(jsxElement) && hasDataEditorId(jsxElement)) {
           wrapWithBridge(path as NodePath<JSXElement>);
         }
@@ -57,18 +53,18 @@ function hasDataEditorId(jsxElement: JSXElement): boolean {
     (attr): attr is JSXAttribute =>
       t.isJSXAttribute(attr) &&
       t.isJSXIdentifier(attr.name) &&
-      attr.name.name === "data-editor-id"
+      attr.name.name === "data-editor-id",
   );
 }
 
 function wrapWithBridge(path: NodePath<JSXElement>): void {
   const originalElement = path.node;
-  
+
   const editorIdAttr = originalElement.openingElement.attributes.find(
     (attr): attr is JSXAttribute =>
       t.isJSXAttribute(attr) &&
       t.isJSXIdentifier(attr.name) &&
-      attr.name.name === "data-editor-id"
+      attr.name.name === "data-editor-id",
   );
 
   if (!editorIdAttr || !t.isStringLiteral(editorIdAttr.value)) {
@@ -78,23 +74,17 @@ function wrapWithBridge(path: NodePath<JSXElement>): void {
   const editorId = editorIdAttr.value.value;
 
   const bridgeElement = t.jsxElement(
-    t.jsxOpeningElement(
-      t.jsxIdentifier("BridgeWrapper"),
-      [
-        t.jsxAttribute(
-          t.jsxIdentifier("editorId"),
-          t.stringLiteral(editorId)
+    t.jsxOpeningElement(t.jsxIdentifier("BridgeWrapper"), [
+      t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),
+      t.jsxAttribute(
+        t.jsxIdentifier("originalElement"),
+        t.jsxExpressionContainer(
+          t.stringLiteral(getElementTagName(originalElement)),
         ),
-        t.jsxAttribute(
-          t.jsxIdentifier("originalElement"),
-          t.jsxExpressionContainer(
-            t.stringLiteral(getElementTagName(originalElement))
-          )
-        ),
-      ]
-    ),
+      ),
+    ]),
     t.jsxClosingElement(t.jsxIdentifier("BridgeWrapper")),
-    [originalElement]
+    [originalElement],
   );
 
   path.replaceWith(bridgeElement);
@@ -129,7 +119,7 @@ const BridgeWrapper = ({ editorId, originalElement, children }) => {
   }
 
   const child = React.Children.only(children);
-  
+
   if (!React.isValidElement(child)) {
     return child;
   }
@@ -139,8 +129,8 @@ const BridgeWrapper = ({ editorId, originalElement, children }) => {
     ...overrides.attributes,
   };
 
-  const finalChildren = overrides.children !== undefined 
-    ? overrides.children 
+  const finalChildren = overrides.children !== undefined
+    ? overrides.children
     : child.props.children;
 
   return cloneElement(child, mergedProps, finalChildren);

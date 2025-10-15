@@ -1,16 +1,16 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { transformSync } from "@babel/core";
-import plugin, { type options } from "../src/attach-metadata";
+import plugin, { type MetadataOptions } from "../src/attach-metadata";
 
 // Helper function to transform code with the plugin
 export function transform(
   code: string,
   filename = "test.js",
-  options: options = {},
+  options: MetadataOptions = {},
 ) {
   const pluginOptions = { ...options, filename };
-  
+
   const result = transformSync(code, {
     plugins: [[plugin, pluginOptions]],
     parserOpts: {

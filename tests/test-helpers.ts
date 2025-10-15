@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { transformSync } from "@babel/core";
-import plugin, { type MetadataOptions } from "../src/attach-metadata";
+import { attachMetadata as plugin, type MetadataOptions } from "../src/index";
 
 // Helper function to transform code with the plugin
 export function transform(

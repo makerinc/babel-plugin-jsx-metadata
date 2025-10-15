@@ -510,6 +510,7 @@ namespace AttachBridge {
   export type BridgeOptions = {
     filename?: string;
     skipFiles?: string[];
+    messageType?: string;
   };
 
   export function attachBridge(
@@ -536,7 +537,7 @@ namespace AttachBridge {
         Program(path) {
           // Always add BridgeWrapper to all files
           if (!hasExistingBridgeWrapper(path)) {
-            addBridgeWrapperCode(path);
+            addBridgeWrapperCode(path, options);
           }
         },
         JSXElement(path: NodePath<JSXElement>) {
@@ -620,27 +621,30 @@ namespace AttachBridge {
     return "div";
   }
 
-  function hasExistingBridgeWrapper(programPath: any): boolean {
+  function hasExistingBridgeWrapper(programPath: NodePath<t.Program>): boolean {
     const body = programPath.node.body;
     return body.some(
-      (node: any) =>
+      (node: t.Statement) =>
         t.isFunctionDeclaration(node) &&
         t.isIdentifier(node.id) &&
         node.id.name === "BridgeWrapper",
     );
   }
 
-  function hasExistingReactImport(programPath: any): boolean {
+  function hasExistingReactImport(programPath: NodePath<t.Program>): boolean {
     const body = programPath.node.body;
     return body.some(
-      (node: any) =>
+      (node: t.Statement) =>
         t.isImportDeclaration(node) &&
         t.isStringLiteral(node.source) &&
         node.source.value === "react",
     );
   }
 
-  function addBridgeWrapperCode(programPath: any): void {
+  function addBridgeWrapperCode(
+    programPath: NodePath<t.Program>,
+    options: BridgeOptions,
+  ): void {
     const needsReactImport = !hasExistingReactImport(programPath);
 
     const bridgeWrapperCode = `${needsReactImport ? 'import React from "react";' : ""}
@@ -651,7 +655,7 @@ function BridgeWrapper({ editorId, children }) {
   React.useEffect(() => {
     const handleMessage = (event) => {
       if (
-        event.data?.type === "ELEMENT_UPDATE" &&
+        event.data?.type === "${options.messageType || "ELEMENT_UPDATE"}" &&
         event.data?.editorId === editorId
       ) {
         setOverrides(event.data.overrides || {});
@@ -675,30 +679,27 @@ function BridgeWrapper({ editorId, children }) {
   }
 
   const originalProps = onlyChild.props ?? {};
-  
-  // Support both direct overrides and nested attributes structure
-  // Extract all direct overrides except 'children' and 'attributes'
+
   const { children: overrideChildren, attributes, ...directOverrides } = overrides;
-  
+
   const attributeOverrides = {
     ...(attributes ?? {}),
     ...directOverrides,
   };
-  
-  // Handle style merging specifically (merge objects, replace primitives)
+
   let mergedStyle = originalProps.style;
   if (attributeOverrides.style !== undefined) {
     mergedStyle = typeof attributeOverrides.style === 'object' && typeof originalProps.style === 'object'
       ? { ...(originalProps.style ?? {}), ...attributeOverrides.style }
       : attributeOverrides.style;
   }
-  
+
   const mergedProps = {
     ...originalProps,
     ...attributeOverrides,
     ...(mergedStyle !== undefined && { style: mergedStyle }),
   };
-  
+
   const finalChildren = overrideChildren !== undefined
     ? overrideChildren
     : originalProps.children ?? null;

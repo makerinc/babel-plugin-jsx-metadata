@@ -609,15 +609,6 @@ namespace AttachBridge {
 
     const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
 
-    cloned.openingElement.attributes = cloned.openingElement.attributes.filter(
-      (attr) =>
-        !(
-          t.isJSXAttribute(attr) &&
-          t.isJSXIdentifier(attr.name) &&
-          attr.name.name === "data-editor-id"
-        ),
-    );
-
     const bridgeElement = t.jsxElement(
       t.jsxOpeningElement(t.jsxIdentifier("BridgeWrapper"), [
         t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),

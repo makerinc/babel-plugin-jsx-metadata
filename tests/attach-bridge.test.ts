@@ -61,7 +61,7 @@ describe("AttachBridge Plugin", () => {
     expect(output).toContain("BridgeWrapper");
     expect(output).toContain('editorId="btn-123"');
     expect(output).toContain('originalElement={"button"}');
-    expect(output).toContain("<button>Click me</button>");
+    expect(output).toContain('<button data-editor-id="btn-123">Click me</button>');
   });
 
   test("should add React import when none exists", () => {
@@ -173,16 +173,16 @@ function Button() {
     expect(output).toContain('<button>No ID</button>'); // Unchanged
   });
 
-  test("should remove data-editor-id from wrapped elements", () => {
+  test("should preserve data-editor-id in wrapped elements", () => {
     const input = `function Button() {
   return <button data-editor-id="btn-123" className="btn">Click me</button>;
 }`;
 
-    const output = transformBridge(input, "remove-editor-id.js");
+    const output = transformBridge(input, "preserve-editor-id.js");
     
-    // The inner button should not have data-editor-id anymore
-    expect(output).toContain('<button className="btn">Click me</button>');
-    expect(output).toContain('editorId="btn-123"'); // But BridgeWrapper should have it
+    // The inner button should preserve data-editor-id
+    expect(output).toContain('<button data-editor-id="btn-123" className="btn">Click me</button>');
+    expect(output).toContain('editorId="btn-123"'); // And BridgeWrapper should have it too
   });
 
   test("should only add BridgeWrapper function when needed", () => {

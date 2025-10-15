@@ -110,7 +110,7 @@ function wrapWithBridge(path: NodePath<JSXElement>): void {
   );
 
   path.replaceWith(bridgeElement);
-  path.skip(); // stop traversal inside replaced subtree
+  path.skip();
 }
 
 function getElementTagName(jsxElement: JSXElement): string {
@@ -120,48 +120,4 @@ function getElementTagName(jsxElement: JSXElement): string {
   return "div";
 }
 
-const BridgeWrapperComponent = `
-import React, { useState, useEffect, cloneElement } from 'react';
-
-const BridgeWrapper = ({ editorId, originalElement, children }) => {
-  const [overrides, setOverrides] = useState({});
-
-  useEffect(() => {
-    const handleMessage = (event) => {
-      if (event.data?.type === 'ELEMENT_UPDATE' && event.data?.editorId === editorId) {
-        setOverrides(event.data.overrides || {});
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [editorId]);
-
-  if (React.Children.count(children) !== 1) {
-    return children;
-  }
-
-  const child = React.Children.only(children);
-
-  if (!React.isValidElement(child)) {
-    return child;
-  }
-
-  const mergedProps = {
-    ...child.props,
-    ...overrides.attributes,
-  };
-
-  const finalChildren =
-    overrides.children !== undefined
-      ? overrides.children
-      : child.props.children;
-
-  return cloneElement(child, mergedProps, finalChildren);
-};
-
-export default BridgeWrapper;
-`;
-
-export { BridgeWrapperComponent };
 export default attachBridgePlugin;

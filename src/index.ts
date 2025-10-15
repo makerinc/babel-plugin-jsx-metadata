@@ -526,10 +526,7 @@ export type BridgeOptions = {
   skipFiles?: string[];
 };
 
-function attachBridge(
-  _api: ConfigAPI,
-  options: BridgeOptions = {},
-): PluginObj {
+function attachBridge(_api: ConfigAPI, options: BridgeOptions = {}): PluginObj {
   const filename = options.filename || "";
   const skipFiles = options.skipFiles || [];
 
@@ -620,7 +617,9 @@ function wrapWithBridge(path: NodePath<JSXElement>): void {
       t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),
       t.jsxAttribute(
         t.jsxIdentifier("originalElement"),
-        t.jsxExpressionContainer(t.stringLiteral(getBridgeElementTagName(original))),
+        t.jsxExpressionContainer(
+          t.stringLiteral(getBridgeElementTagName(original)),
+        ),
       ),
     ]),
     t.jsxClosingElement(t.jsxIdentifier("BridgeWrapper")),

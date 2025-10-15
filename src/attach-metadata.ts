@@ -88,7 +88,7 @@ function generateNewId(context: IdGenerationContext): string {
   do {
     const pathStr =
       context.elementPath.length > 0
-        ? context.elementPath.join(".") + ".element"
+        ? `${context.elementPath.join(".")}.element`
         : "element";
     const internalId = `${pathStr}[${context.elementCounter++}]@${context.filename}`;
 

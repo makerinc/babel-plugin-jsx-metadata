@@ -70,7 +70,7 @@ namespace AttachMetadata {
         finalId = generateNewId(context);
       }
     } else {
-        finalId = generateNewId(context);
+      finalId = generateNewId(context);
     }
 
     context.usedIds.add(finalId);
@@ -103,7 +103,7 @@ namespace AttachMetadata {
     name: string,
     value: string,
   ): void {
-      const existingAttrIndex = openingElement.attributes.findIndex(
+    const existingAttrIndex = openingElement.attributes.findIndex(
       (attr): attr is JSXAttribute =>
         t.isJSXAttribute(attr) &&
         t.isJSXIdentifier(attr.name) &&
@@ -116,9 +116,9 @@ namespace AttachMetadata {
     );
 
     if (existingAttrIndex !== -1) {
-        openingElement.attributes[existingAttrIndex] = newAttribute;
+      openingElement.attributes[existingAttrIndex] = newAttribute;
     } else {
-        openingElement.attributes.push(newAttribute);
+      openingElement.attributes.push(newAttribute);
     }
   }
 
@@ -180,14 +180,14 @@ namespace AttachMetadata {
     return {
       name: "babel-plugin-jsx-metadata",
       visitor: {
-          FunctionDeclaration(path) {
+        FunctionDeclaration(path) {
           const componentName = getComponentName(path);
           if (componentName) {
             processComponent(path, componentName, filename);
           }
         },
 
-          VariableDeclarator(path) {
+        VariableDeclarator(path) {
           const componentName = getComponentName(path);
           if (
             componentName &&
@@ -206,13 +206,13 @@ namespace AttachMetadata {
     componentName: string,
     filename: string,
   ): void {
-      const context: IdGenerationContext = {
+    const context: IdGenerationContext = {
       filename,
       usedIds: new Set<string>(),
       elementCounter: 0,
       elementPath: [],
     };
-      if (path.isFunctionDeclaration()) {
+    if (path.isFunctionDeclaration()) {
       path.traverse({
         ReturnStatement(returnPath: NodePath<ReturnStatement>) {
           processComponentReturn(returnPath, filename, componentName, context);
@@ -220,11 +220,11 @@ namespace AttachMetadata {
       });
     }
 
-      if (path.isVariableDeclarator() && path.node.init) {
+    if (path.isVariableDeclarator() && path.node.init) {
       const func = path.node.init;
 
       if (t.isArrowFunctionExpression(func)) {
-          if (t.isJSXElement(func.body)) {
+        if (t.isJSXElement(func.body)) {
           addEditorMetadata(func.body, filename, componentName, true, context);
           processJSXChildren(func.body, filename, false, context); // Root element: no text wrapping
         } else if (t.isJSXFragment(func.body)) {
@@ -248,8 +248,7 @@ namespace AttachMetadata {
             processJSXChildren(jsxElement, filename, false, context); // Root element: no text wrapping
             func.body = jsxElement;
           }
-        }
-          else if (t.isBlockStatement(func.body)) {
+        } else if (t.isBlockStatement(func.body)) {
           path.traverse({
             ReturnStatement(returnPath: NodePath<ReturnStatement>) {
               processComponentReturn(
@@ -319,9 +318,9 @@ namespace AttachMetadata {
     const openingElement: JSXOpeningElement = jsxElement.openingElement;
 
     if (isRoot) {
-        addComponentAttributes(openingElement, filename, componentName, context);
+      addComponentAttributes(openingElement, filename, componentName, context);
     } else {
-        addRenderedByAttributes(openingElement, filename, context);
+      addRenderedByAttributes(openingElement, filename, context);
     }
   }
 
@@ -348,7 +347,7 @@ namespace AttachMetadata {
   ): void {
     if (!jsxElement.children) return;
 
-      const currentTagName = getElementTagName(jsxElement);
+    const currentTagName = getElementTagName(jsxElement);
     context.elementPath.push(currentTagName);
 
     const processedChildren: JSXChild[] = [];
@@ -357,16 +356,16 @@ namespace AttachMetadata {
     jsxElement.children.forEach((child) => {
       if (t.isJSXElement(child)) {
         if (!isReactComponent(child)) {
-            addRenderedByAttributes(child.openingElement, filename, context);
+          addRenderedByAttributes(child.openingElement, filename, context);
           processJSXChildren(child, filename, false, context);
         } else {
-            processJSXChildren(child, filename, true, context);
+          processJSXChildren(child, filename, true, context);
         }
         processedChildren.push(child);
       } else if (t.isJSXText(child)) {
         const textContent = child.value.trim();
         if (textContent && wrapExpressions) {
-            const spanOpeningElement = t.jsxOpeningElement(
+          const spanOpeningElement = t.jsxOpeningElement(
             t.jsxIdentifier("span"),
             [],
           );
@@ -405,7 +404,7 @@ namespace AttachMetadata {
       }
     });
 
-      context.elementPath.pop();
+    context.elementPath.pop();
 
     if (hasChanges) {
       jsxElement.children = processedChildren;
@@ -546,9 +545,9 @@ namespace AttachBridge {
               ) {
                 needsWrapper = true;
               }
-            }
+            },
           });
-          
+
           if (needsWrapper && !hasExistingBridgeWrapper(path)) {
             addBridgeWrapperCode(path);
           }
@@ -608,9 +607,9 @@ namespace AttachBridge {
 
     const editorId = editorIdAttr.value.value;
 
-      const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
+    const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
 
-      cloned.openingElement.attributes = cloned.openingElement.attributes.filter(
+    cloned.openingElement.attributes = cloned.openingElement.attributes.filter(
       (attr) =>
         !(
           t.isJSXAttribute(attr) &&
@@ -645,62 +644,83 @@ namespace AttachBridge {
 
   function hasExistingBridgeWrapper(programPath: any): boolean {
     const body = programPath.node.body;
-    return body.some((node: any) => 
-      t.isFunctionDeclaration(node) && 
-      t.isIdentifier(node.id) && 
-      node.id.name === "BridgeWrapper"
+    return body.some(
+      (node: any) =>
+        t.isFunctionDeclaration(node) &&
+        t.isIdentifier(node.id) &&
+        node.id.name === "BridgeWrapper",
+    );
+  }
+
+  function hasExistingReactImport(programPath: any): boolean {
+    const body = programPath.node.body;
+    return body.some(
+      (node: any) =>
+        t.isImportDeclaration(node) &&
+        t.isStringLiteral(node.source) &&
+        node.source.value === "react",
     );
   }
 
   function addBridgeWrapperCode(programPath: any): void {
-    // Add React import
-    const reactImport = t.importDeclaration(
-      [
-        t.importDefaultSpecifier(t.identifier("React")),
-        t.importSpecifier(t.identifier("cloneElement"), t.identifier("cloneElement")),
-        t.importSpecifier(t.identifier("useEffect"), t.identifier("useEffect")),
-        t.importSpecifier(t.identifier("useState"), t.identifier("useState"))
-      ],
-      t.stringLiteral("react")
-    );
+    const needsReactImport = !hasExistingReactImport(programPath);
 
-    // Create BridgeWrapper function (simplified version using createElement instead of JSX)
-    const bridgeWrapperFunction = t.functionDeclaration(
-      t.identifier("BridgeWrapper"),
-      [
-        t.objectPattern([
-          t.objectProperty(t.identifier("editorId"), t.identifier("editorId"), false, true),
-          t.objectProperty(t.identifier("children"), t.identifier("children"), false, true)
-        ])
-      ],
-      t.blockStatement([
-        // const [overrides, setOverrides] = useState({});
-        t.variableDeclaration("const", [
-          t.variableDeclarator(
-            t.arrayPattern([t.identifier("overrides"), t.identifier("setOverrides")]),
-            t.callExpression(t.identifier("useState"), [t.objectExpression([])])
-          )
-        ]),
-        
-        // Simple return statement for now - just return children wrapped in Fragment
-        t.returnStatement(
-          t.callExpression(
-            t.memberExpression(t.identifier("React"), t.identifier("createElement")),
-            [
-              t.memberExpression(t.identifier("React"), t.identifier("Fragment")),
-              t.nullLiteral(),
-              t.identifier("children")
-            ]
-          )
-        )
-      ])
-    );
+    const bridgeWrapperCode = `${needsReactImport ? 'import React, { cloneElement, useEffect, useState } from "react";\n\n' : ""}function BridgeWrapper({ editorId, children }) {
+  const [overrides, setOverrides] = useState({});
 
-    programPath.unshiftContainer("body", reactImport);
-    programPath.unshiftContainer("body", bridgeWrapperFunction);
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (
+        event.data?.type === "ELEMENT_UPDATE" &&
+        event.data?.editorId === editorId
+      ) {
+        setOverrides(event.data.overrides || {});
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("message", handleMessage);
+      return () => window.removeEventListener("message", handleMessage);
+    }
+  }, [editorId]);
+
+  if (React.Children.count(children) !== 1) {
+    return React.createElement(React.Fragment, null, children);
   }
+
+  const onlyChild = React.Children.only(children);
+
+  if (!React.isValidElement(onlyChild)) {
+    return React.createElement(React.Fragment, null, onlyChild);
+  }
+
+  const mergedProps = {
+    ...(onlyChild.props ?? {}),
+    ...(overrides.attributes ?? {}),
+  };
+
+  const finalChildren = overrides.children !== undefined
+    ? overrides.children
+    : onlyChild.props.children ?? null;
+
+  return cloneElement(onlyChild, mergedProps, finalChildren);
 }
 
+`;
+
+    const ast = parse(bridgeWrapperCode, {
+      sourceType: "module",
+      plugins: ["jsx", "typescript"],
+    });
+
+    if (ast?.program?.body && Array.isArray(ast.program.body)) {
+      // Add nodes in reverse order since unshiftContainer adds to the beginning
+      for (let i = ast.program.body.length - 1; i >= 0; i--) {
+        programPath.unshiftContainer("body", ast.program.body[i]);
+      }
+    }
+  }
+}
 
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;

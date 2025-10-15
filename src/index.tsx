@@ -2,6 +2,7 @@ import type { ConfigAPI } from "@babel/core";
 import crypto from "node:crypto";
 import type { NodePath } from "@babel/traverse";
 import { type PluginObj, types as t } from "@babel/core";
+import { parse } from "@babel/parser";
 import type {
   CallExpression,
   JSXAttribute,
@@ -13,7 +14,6 @@ import type {
   JSXText,
   ReturnStatement,
 } from "@babel/types";
-import React, { cloneElement, useEffect, useState } from "react";
 
 namespace AttachMetadata {
   type JSXChild =
@@ -511,7 +511,6 @@ namespace AttachBridge {
   export type BridgeOptions = {
     filename?: string;
     skipFiles?: string[];
-    componentUrl?: string;
   };
 
   export function attachBridge(
@@ -520,7 +519,6 @@ namespace AttachBridge {
   ): PluginObj {
     const filename = options.filename || "";
     const skipFiles = options.skipFiles || [];
-    const componentUrl = options.componentUrl;
 
     if (
       skipFiles.some(
@@ -537,8 +535,22 @@ namespace AttachBridge {
       name: "babel-plugin-jsx-bridge",
       visitor: {
         Program(path) {
-          if (componentUrl && !hasExistingBridgeWrapperImport(path)) {
-            addBridgeWrapperImport(path, componentUrl);
+          let needsWrapper = false;
+          path.traverse({
+            JSXElement(jsxPath: NodePath<JSXElement>) {
+              const jsxElement = jsxPath.node;
+              if (
+                isHTMLElement(jsxElement) &&
+                hasDataEditorId(jsxElement) &&
+                !isAlreadyWrapped(jsxPath)
+              ) {
+                needsWrapper = true;
+              }
+            }
+          });
+          
+          if (needsWrapper && !hasExistingBridgeWrapper(path)) {
+            addBridgeWrapperCode(path);
           }
         },
         JSXElement(path: NodePath<JSXElement>) {
@@ -631,83 +643,64 @@ namespace AttachBridge {
     return "div";
   }
 
-  function hasExistingBridgeWrapperImport(programPath: any): boolean {
+  function hasExistingBridgeWrapper(programPath: any): boolean {
     const body = programPath.node.body;
     return body.some((node: any) => 
-      t.isImportDeclaration(node) &&
-      node.specifiers.some((spec: any) => 
-        t.isImportSpecifier(spec) && 
-        t.isIdentifier(spec.imported) && 
-        spec.imported.name === "BridgeWrapper"
-      )
+      t.isFunctionDeclaration(node) && 
+      t.isIdentifier(node.id) && 
+      node.id.name === "BridgeWrapper"
     );
   }
 
-  function addBridgeWrapperImport(programPath: any, componentUrl: string): void {
-    const importDeclaration = t.importDeclaration(
-      [t.importSpecifier(t.identifier("BridgeWrapper"), t.identifier("BridgeWrapper"))],
-      t.stringLiteral(componentUrl)
+  function addBridgeWrapperCode(programPath: any): void {
+    // Add React import
+    const reactImport = t.importDeclaration(
+      [
+        t.importDefaultSpecifier(t.identifier("React")),
+        t.importSpecifier(t.identifier("cloneElement"), t.identifier("cloneElement")),
+        t.importSpecifier(t.identifier("useEffect"), t.identifier("useEffect")),
+        t.importSpecifier(t.identifier("useState"), t.identifier("useState"))
+      ],
+      t.stringLiteral("react")
     );
-    
-    programPath.unshiftContainer("body", importDeclaration);
+
+    // Create BridgeWrapper function (simplified version using createElement instead of JSX)
+    const bridgeWrapperFunction = t.functionDeclaration(
+      t.identifier("BridgeWrapper"),
+      [
+        t.objectPattern([
+          t.objectProperty(t.identifier("editorId"), t.identifier("editorId"), false, true),
+          t.objectProperty(t.identifier("children"), t.identifier("children"), false, true)
+        ])
+      ],
+      t.blockStatement([
+        // const [overrides, setOverrides] = useState({});
+        t.variableDeclaration("const", [
+          t.variableDeclarator(
+            t.arrayPattern([t.identifier("overrides"), t.identifier("setOverrides")]),
+            t.callExpression(t.identifier("useState"), [t.objectExpression([])])
+          )
+        ]),
+        
+        // Simple return statement for now - just return children wrapped in Fragment
+        t.returnStatement(
+          t.callExpression(
+            t.memberExpression(t.identifier("React"), t.identifier("createElement")),
+            [
+              t.memberExpression(t.identifier("React"), t.identifier("Fragment")),
+              t.nullLiteral(),
+              t.identifier("children")
+            ]
+          )
+        )
+      ])
+    );
+
+    programPath.unshiftContainer("body", reactImport);
+    programPath.unshiftContainer("body", bridgeWrapperFunction);
   }
 }
 
-// ===== BRIDGE WRAPPER COMPONENT =====
-
-type Override = {
-  attributes?: Record<string, unknown>;
-  children?: React.ReactNode;
-};
-
-type BridgeWrapperProps = {
-  editorId: string;
-  children: React.ReactNode;
-};
-
-export const BridgeWrapper: React.FC<BridgeWrapperProps> = ({ editorId, children }) => {
-  const [overrides, setOverrides] = useState<Override>({});
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (
-        event.data?.type === "ELEMENT_UPDATE" &&
-        event.data?.editorId === editorId
-      ) {
-        setOverrides(event.data.overrides || {});
-      }
-    };
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("message", handleMessage);
-      return () => window.removeEventListener("message", handleMessage);
-    }
-  }, [editorId]);
-
-  if (React.Children.count(children) !== 1) {
-    return <>{children}</>;
-  }
-
-  const onlyChild = React.Children.only(children);
-
-  if (!React.isValidElement(onlyChild)) {
-    return <>{onlyChild}</>;
-  }
-
-  const child = onlyChild as React.ReactElement<Record<string, unknown>>;
-
-  const mergedProps = {
-    ...(child.props ?? {}),
-    ...(overrides.attributes ?? {}),
-  };
-
-  const finalChildren: React.ReactNode =
-    overrides.children !== undefined
-      ? overrides.children
-      : (child.props.children as React.ReactNode) ?? null;
-
-  return cloneElement(child, mergedProps, finalChildren);
-};
 
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;

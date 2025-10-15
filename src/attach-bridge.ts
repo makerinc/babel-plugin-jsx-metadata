@@ -29,11 +29,15 @@ function attachBridgePlugin(
   return {
     name: "babel-plugin-jsx-bridge",
     visitor: {
-      JSXElement(path: NodePath) {
-        const jsxElement = path.node as JSXElement;
+      JSXElement(path: NodePath<JSXElement>) {
+        const jsxElement = path.node;
 
-        if (isHTMLElement(jsxElement) && hasDataEditorId(jsxElement)) {
-          wrapWithBridge(path as NodePath<JSXElement>);
+        if (
+          isHTMLElement(jsxElement) &&
+          hasDataEditorId(jsxElement) &&
+          !isAlreadyWrapped(path)
+        ) {
+          wrapWithBridge(path);
         }
       },
     },
@@ -57,37 +61,56 @@ function hasDataEditorId(jsxElement: JSXElement): boolean {
   );
 }
 
-function wrapWithBridge(path: NodePath<JSXElement>): void {
-  const originalElement = path.node;
+function isAlreadyWrapped(path: NodePath<JSXElement>): boolean {
+  const parent = path.parentPath;
+  return !!(
+    parent?.isJSXElement() &&
+    t.isJSXIdentifier(parent.node.openingElement.name) &&
+    parent.node.openingElement.name.name === "BridgeWrapper"
+  );
+}
 
-  const editorIdAttr = originalElement.openingElement.attributes.find(
+function wrapWithBridge(path: NodePath<JSXElement>): void {
+  const original = path.node;
+
+  const editorIdAttr = original.openingElement.attributes.find(
     (attr): attr is JSXAttribute =>
       t.isJSXAttribute(attr) &&
       t.isJSXIdentifier(attr.name) &&
       attr.name.name === "data-editor-id",
   );
 
-  if (!editorIdAttr || !t.isStringLiteral(editorIdAttr.value)) {
-    return;
-  }
+  if (!editorIdAttr || !t.isStringLiteral(editorIdAttr.value)) return;
 
   const editorId = editorIdAttr.value.value;
+
+  // Clone to prevent circular AST references
+  const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
+
+  // Remove the data-editor-id attribute so it won't be rewrapped
+  cloned.openingElement.attributes = cloned.openingElement.attributes.filter(
+    (attr) =>
+      !(
+        t.isJSXAttribute(attr) &&
+        t.isJSXIdentifier(attr.name) &&
+        attr.name.name === "data-editor-id"
+      ),
+  );
 
   const bridgeElement = t.jsxElement(
     t.jsxOpeningElement(t.jsxIdentifier("BridgeWrapper"), [
       t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),
       t.jsxAttribute(
         t.jsxIdentifier("originalElement"),
-        t.jsxExpressionContainer(
-          t.stringLiteral(getElementTagName(originalElement)),
-        ),
+        t.jsxExpressionContainer(t.stringLiteral(getElementTagName(original))),
       ),
     ]),
     t.jsxClosingElement(t.jsxIdentifier("BridgeWrapper")),
-    [originalElement],
+    [cloned],
   );
 
   path.replaceWith(bridgeElement);
+  path.skip(); // stop traversal inside replaced subtree
 }
 
 function getElementTagName(jsxElement: JSXElement): string {
@@ -129,9 +152,10 @@ const BridgeWrapper = ({ editorId, originalElement, children }) => {
     ...overrides.attributes,
   };
 
-  const finalChildren = overrides.children !== undefined
-    ? overrides.children
-    : child.props.children;
+  const finalChildren =
+    overrides.children !== undefined
+      ? overrides.children
+      : child.props.children;
 
   return cloneElement(child, mergedProps, finalChildren);
 };

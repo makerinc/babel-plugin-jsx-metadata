@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { transformSync } from "@babel/core";
 import { transform } from "./test-helpers";
-import babelPluginDomEditor from "../src/index";
+import { attachMetadata as babelPluginDomEditor } from "../src/index";
 
 // Test fixtures
 const skipComponentInput = `function SkipComponent() {

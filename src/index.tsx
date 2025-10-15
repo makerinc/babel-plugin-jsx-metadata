@@ -654,7 +654,6 @@ function BridgeWrapper({ editorId, children }) {
         event.data?.type === "ELEMENT_UPDATE" &&
         event.data?.editorId === editorId
       ) {
-        console.log("BridgeWrapper received update:", { editorId, overrides: event.data.overrides });
         setOverrides(event.data.overrides || {});
       }
     };
@@ -700,15 +699,6 @@ function BridgeWrapper({ editorId, children }) {
     ...(mergedStyle !== undefined && { style: mergedStyle }),
   };
   
-  console.log("BridgeWrapper prop merging:", { 
-    editorId, 
-    originalProps, 
-    attributeOverrides, 
-    mergedProps,
-    hasOverrides: Object.keys(overrides).length > 0,
-    rawOverrides: overrides
-  });
-
   const finalChildren = overrideChildren !== undefined
     ? overrideChildren
     : originalProps.children ?? null;

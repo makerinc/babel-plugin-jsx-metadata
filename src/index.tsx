@@ -654,6 +654,7 @@ function BridgeWrapper({ editorId, children }) {
         event.data?.type === "ELEMENT_UPDATE" &&
         event.data?.editorId === editorId
       ) {
+        console.log("BridgeWrapper received update:", { editorId, overrides: event.data.overrides });
         setOverrides(event.data.overrides || {});
       }
     };
@@ -674,14 +675,41 @@ function BridgeWrapper({ editorId, children }) {
     return React.createElement(React.Fragment, null, onlyChild);
   }
 
+  const originalProps = onlyChild.props ?? {};
+  const attributeOverrides = overrides.attributes ?? {};
+  
+  // Handle className merging
+  let mergedClassName = originalProps.className;
+  if (attributeOverrides.className !== undefined) {
+    mergedClassName = attributeOverrides.className;
+  }
+  
+  // Handle style merging
+  let mergedStyle = originalProps.style;
+  if (attributeOverrides.style !== undefined) {
+    mergedStyle = typeof attributeOverrides.style === 'object' 
+      ? { ...(originalProps.style ?? {}), ...attributeOverrides.style }
+      : attributeOverrides.style;
+  }
+  
   const mergedProps = {
-    ...(onlyChild.props ?? {}),
-    ...(overrides.attributes ?? {}),
+    ...originalProps,
+    ...attributeOverrides,
+    ...(mergedClassName !== undefined && { className: mergedClassName }),
+    ...(mergedStyle !== undefined && { style: mergedStyle }),
   };
+  
+  console.log("BridgeWrapper prop merging:", { 
+    editorId, 
+    originalProps, 
+    attributeOverrides, 
+    mergedProps,
+    hasOverrides: Object.keys(overrides).length > 0
+  });
 
   const finalChildren = overrides.children !== undefined
     ? overrides.children
-    : onlyChild.props.children ?? null;
+    : originalProps.children ?? null;
 
   return React.cloneElement(onlyChild, mergedProps, finalChildren);
 }

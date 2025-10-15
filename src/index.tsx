@@ -650,7 +650,16 @@ namespace AttachBridge {
     const bridgeWrapperCode = `${needsReactImport ? 'import React from "react";' : ""}
 
 function BridgeWrapper({ editorId, children }) {
-  const [overrides, setOverrides] = React.useState({});
+  if (typeof window !== "undefined" && !window.__elementOverrides) {
+    window.__elementOverrides = {};
+  }
+
+  const [overrides, setOverrides] = React.useState(() => {
+    if (typeof window !== "undefined" && window.__elementOverrides) {
+      return window.__elementOverrides[editorId] || {};
+    }
+    return {};
+  });
 
   React.useEffect(() => {
     const handleMessage = (event) => {
@@ -658,7 +667,16 @@ function BridgeWrapper({ editorId, children }) {
         event.data?.type === "${options.messageType || "ELEMENT_UPDATE"}" &&
         event.data?.editorId === editorId
       ) {
-        setOverrides(event.data.overrides || {});
+        const newOverrides = event.data.overrides || {};
+
+        if (typeof window !== "undefined") {
+          if (!window.__elementOverrides) {
+            window.__elementOverrides = {};
+          }
+          window.__elementOverrides[editorId] = newOverrides;
+        }
+
+        setOverrides(newOverrides);
       }
     };
 

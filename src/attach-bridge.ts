@@ -110,7 +110,6 @@ function wrapWithBridge(path: NodePath<JSXElement>): void {
   );
 
   path.replaceWith(bridgeElement);
-  path.skip();
 }
 
 function getElementTagName(jsxElement: JSXElement): string {

@@ -676,18 +676,20 @@ function BridgeWrapper({ editorId, children }) {
   }
 
   const originalProps = onlyChild.props ?? {};
-  const attributeOverrides = overrides.attributes ?? {};
   
-  // Handle className merging
-  let mergedClassName = originalProps.className;
-  if (attributeOverrides.className !== undefined) {
-    mergedClassName = attributeOverrides.className;
-  }
+  // Support both direct overrides and nested attributes structure
+  // Extract all direct overrides except 'children' and 'attributes'
+  const { children: overrideChildren, attributes, ...directOverrides } = overrides;
   
-  // Handle style merging
+  const attributeOverrides = {
+    ...(attributes ?? {}),
+    ...directOverrides,
+  };
+  
+  // Handle style merging specifically (merge objects, replace primitives)
   let mergedStyle = originalProps.style;
   if (attributeOverrides.style !== undefined) {
-    mergedStyle = typeof attributeOverrides.style === 'object' 
+    mergedStyle = typeof attributeOverrides.style === 'object' && typeof originalProps.style === 'object'
       ? { ...(originalProps.style ?? {}), ...attributeOverrides.style }
       : attributeOverrides.style;
   }
@@ -695,7 +697,6 @@ function BridgeWrapper({ editorId, children }) {
   const mergedProps = {
     ...originalProps,
     ...attributeOverrides,
-    ...(mergedClassName !== undefined && { className: mergedClassName }),
     ...(mergedStyle !== undefined && { style: mergedStyle }),
   };
   
@@ -704,11 +705,12 @@ function BridgeWrapper({ editorId, children }) {
     originalProps, 
     attributeOverrides, 
     mergedProps,
-    hasOverrides: Object.keys(overrides).length > 0
+    hasOverrides: Object.keys(overrides).length > 0,
+    rawOverrides: overrides
   });
 
-  const finalChildren = overrides.children !== undefined
-    ? overrides.children
+  const finalChildren = overrideChildren !== undefined
+    ? overrideChildren
     : originalProps.children ?? null;
 
   return React.cloneElement(onlyChild, mergedProps, finalChildren);

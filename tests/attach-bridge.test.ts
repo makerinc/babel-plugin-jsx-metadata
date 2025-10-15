@@ -185,15 +185,17 @@ function Button() {
     expect(output).toContain('editorId="btn-123"'); // And BridgeWrapper should have it too
   });
 
-  test("should only add BridgeWrapper function when needed", () => {
+  test("should always add BridgeWrapper function to all files", () => {
     const input = `function Button() {
   return <button>No editor ID</button>;
 }`;
 
-    const output = transformBridge(input, "no-wrapper-needed.js");
+    const output = transformBridge(input, "always-add-wrapper.js");
     
-    // Should not add BridgeWrapper when no elements need wrapping
-    expect(output).not.toContain("function BridgeWrapper");
-    expect(output).not.toContain("import React");
+    // Should always add BridgeWrapper even when no elements need wrapping
+    expect(output).toContain("function BridgeWrapper");
+    expect(output).toContain("import React");
+    // But the button itself should not be wrapped since it has no data-editor-id
+    expect(output).toContain('<button>No editor ID</button>');
   });
 });

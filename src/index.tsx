@@ -534,21 +534,8 @@ namespace AttachBridge {
       name: "babel-plugin-jsx-bridge",
       visitor: {
         Program(path) {
-          let needsWrapper = false;
-          path.traverse({
-            JSXElement(jsxPath: NodePath<JSXElement>) {
-              const jsxElement = jsxPath.node;
-              if (
-                isHTMLElement(jsxElement) &&
-                hasDataEditorId(jsxElement) &&
-                !isAlreadyWrapped(jsxPath)
-              ) {
-                needsWrapper = true;
-              }
-            },
-          });
-
-          if (needsWrapper && !hasExistingBridgeWrapper(path)) {
+          // Always add BridgeWrapper to all files
+          if (!hasExistingBridgeWrapper(path)) {
             addBridgeWrapperCode(path);
           }
         },

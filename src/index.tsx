@@ -13,6 +13,7 @@ import type {
   JSXText,
   ReturnStatement,
 } from "@babel/types";
+import React, { cloneElement, useEffect, useState } from "react";
 
 namespace AttachMetadata {
   type JSXChild =
@@ -510,6 +511,7 @@ namespace AttachBridge {
   export type BridgeOptions = {
     filename?: string;
     skipFiles?: string[];
+    componentUrl?: string;
   };
 
   export function attachBridge(
@@ -518,6 +520,7 @@ namespace AttachBridge {
   ): PluginObj {
     const filename = options.filename || "";
     const skipFiles = options.skipFiles || [];
+    const componentUrl = options.componentUrl;
 
     if (
       skipFiles.some(
@@ -533,6 +536,11 @@ namespace AttachBridge {
     return {
       name: "babel-plugin-jsx-bridge",
       visitor: {
+        Program(path) {
+          if (componentUrl && !hasExistingBridgeWrapperImport(path)) {
+            addBridgeWrapperImport(path, componentUrl);
+          }
+        },
         JSXElement(path: NodePath<JSXElement>) {
           const jsxElement = path.node;
 
@@ -622,7 +630,84 @@ namespace AttachBridge {
     }
     return "div";
   }
+
+  function hasExistingBridgeWrapperImport(programPath: any): boolean {
+    const body = programPath.node.body;
+    return body.some((node: any) => 
+      t.isImportDeclaration(node) &&
+      node.specifiers.some((spec: any) => 
+        t.isImportSpecifier(spec) && 
+        t.isIdentifier(spec.imported) && 
+        spec.imported.name === "BridgeWrapper"
+      )
+    );
+  }
+
+  function addBridgeWrapperImport(programPath: any, componentUrl: string): void {
+    const importDeclaration = t.importDeclaration(
+      [t.importSpecifier(t.identifier("BridgeWrapper"), t.identifier("BridgeWrapper"))],
+      t.stringLiteral(componentUrl)
+    );
+    
+    programPath.unshiftContainer("body", importDeclaration);
+  }
 }
+
+// ===== BRIDGE WRAPPER COMPONENT =====
+
+type Override = {
+  attributes?: Record<string, unknown>;
+  children?: React.ReactNode;
+};
+
+type BridgeWrapperProps = {
+  editorId: string;
+  children: React.ReactNode;
+};
+
+export const BridgeWrapper: React.FC<BridgeWrapperProps> = ({ editorId, children }) => {
+  const [overrides, setOverrides] = useState<Override>({});
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (
+        event.data?.type === "ELEMENT_UPDATE" &&
+        event.data?.editorId === editorId
+      ) {
+        setOverrides(event.data.overrides || {});
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("message", handleMessage);
+      return () => window.removeEventListener("message", handleMessage);
+    }
+  }, [editorId]);
+
+  if (React.Children.count(children) !== 1) {
+    return <>{children}</>;
+  }
+
+  const onlyChild = React.Children.only(children);
+
+  if (!React.isValidElement(onlyChild)) {
+    return <>{onlyChild}</>;
+  }
+
+  const child = onlyChild as React.ReactElement<Record<string, unknown>>;
+
+  const mergedProps = {
+    ...(child.props ?? {}),
+    ...(overrides.attributes ?? {}),
+  };
+
+  const finalChildren: React.ReactNode =
+    overrides.children !== undefined
+      ? overrides.children
+      : (child.props.children as React.ReactNode) ?? null;
+
+  return cloneElement(child, mergedProps, finalChildren);
+};
 
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;

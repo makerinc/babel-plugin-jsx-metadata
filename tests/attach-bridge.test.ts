@@ -71,7 +71,7 @@ describe("AttachBridge Plugin", () => {
 
     const output = transformBridge(input, "no-react-import.js");
     
-    expect(output).toContain('import React, { cloneElement, useEffect, useState } from "react"');
+    expect(output).toContain('import React from "react"');
     expect(output).toContain("function BridgeWrapper");
   });
 

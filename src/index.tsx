@@ -665,10 +665,12 @@ namespace AttachBridge {
   function addBridgeWrapperCode(programPath: any): void {
     const needsReactImport = !hasExistingReactImport(programPath);
 
-    const bridgeWrapperCode = `${needsReactImport ? 'import React, { cloneElement, useEffect, useState } from "react";\n\n' : ""}function BridgeWrapper({ editorId, children }) {
-  const [overrides, setOverrides] = useState({});
+    const bridgeWrapperCode = `${needsReactImport ? 'import React from "react";' : ""}
 
-  useEffect(() => {
+function BridgeWrapper({ editorId, children }) {
+  const [overrides, setOverrides] = React.useState({});
+
+  React.useEffect(() => {
     const handleMessage = (event) => {
       if (
         event.data?.type === "ELEMENT_UPDATE" &&
@@ -703,7 +705,7 @@ namespace AttachBridge {
     ? overrides.children
     : onlyChild.props.children ?? null;
 
-  return cloneElement(onlyChild, mergedProps, finalChildren);
+  return React.cloneElement(onlyChild, mergedProps, finalChildren);
 }
 
 `;

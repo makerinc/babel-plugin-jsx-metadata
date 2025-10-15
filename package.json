@@ -9,16 +9,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./attach-metadata": {
-      "import": "./dist/attach-metadata.js",
-      "require": "./dist/attach-metadata.js",
-      "types": "./dist/attach-metadata.d.ts"
-    },
-    "./attach-bridge": {
-      "import": "./dist/attach-bridge.js",
-      "require": "./dist/attach-bridge.js",
-      "types": "./dist/attach-bridge.d.ts"
     }
   },
   "scripts": {

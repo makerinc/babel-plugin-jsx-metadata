@@ -715,9 +715,20 @@ function BridgeWrapper({ editorId, children }) {
 
   let mergedStyle = originalProps.style;
   if (attributeOverrides.style !== undefined) {
-    mergedStyle = typeof attributeOverrides.style === 'object' && typeof originalProps.style === 'object'
-      ? { ...(originalProps.style ?? {}), ...attributeOverrides.style }
-      : attributeOverrides.style;
+    const originalStyle = originalProps.style;
+    const overrideStyle = attributeOverrides.style;
+    
+    mergedStyle = typeof overrideStyle === 'object' && typeof originalStyle === 'object'
+      ? { ...(originalStyle ?? {}), ...overrideStyle }
+      : overrideStyle;
+    
+    ${options.debugger ? `console.log("[BridgeWrapper]", "Style merging:", { 
+      editorId, 
+      originalStyle, 
+      overrideStyle, 
+      mergedStyle,
+      mergeType: typeof overrideStyle === 'object' && typeof originalStyle === 'object' ? 'object-merge' : 'complete-replace'
+    });` : ""}
   }
 
   const mergedProps = {

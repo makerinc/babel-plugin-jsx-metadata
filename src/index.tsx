@@ -645,112 +645,119 @@ namespace AttachBridge {
   function addBridgeWrapperCode(
     programPath: NodePath<t.Program>,
     options: BridgeOptions,
-  ): void {
+  ) {
     const needsReactImport = !hasExistingReactImport(programPath);
+    const messageType = options.messageType || "ELEMENT_UPDATE";
+    const debug = !!options.debugger;
 
-    const bridgeWrapperCode = `${needsReactImport ? 'import React from "react";' : ""}
+    const bridgeWrapperCode = `
+  ${needsReactImport ? 'import React from "react";' : ""}
 
-function BridgeWrapper({ editorId, children }) {
-  if (typeof window !== "undefined" && !window.__elementOverrides) {
-    window.__elementOverrides = {};
-  }
+  function BridgeWrapper({ editorId, children }) {
+    const ensureGlobal = () => {
+      if (typeof window === "undefined") return;
+      window.__elementOverrides = window.__elementOverrides || {};
+    };
+    ensureGlobal();
 
-  const [overrides, setOverrides] = React.useState(() => {
-    if (typeof window !== "undefined" && window.__elementOverrides) {
-      const storedOverrides = window.__elementOverrides[editorId] || {};
-      ${options.debugger ? `console.log("[BridgeWrapper]", "Initialized from global state:", { editorId, storedOverrides });` : ""}
-      return storedOverrides;
-    }
-    ${options.debugger ? `console.log("[BridgeWrapper]", "Initialized with empty state:", { editorId });` : ""}
-    return {};
-  });
+    const [overrides, setOverrides] = React.useState(() => {
+      ensureGlobal();
+      const stored = window.__elementOverrides?.[editorId] || {};
+      ${debug ? `console.log("[BridgeWrapper]", "Init:", { editorId, stored });` : ""}
+      return stored;
+    });
 
-  React.useEffect(() => {
-    const handleMessage = (event) => {
-      if (
-        event.data?.type === "${options.messageType || "ELEMENT_UPDATE"}" &&
-        event.data?.editorId === editorId
-      ) {
-        const newOverrides = event.data.overrides || {};
-        
-        ${options.debugger ? `console.log("[BridgeWrapper]", "Message received:", { editorId, messageType: event.data.type, overrides: newOverrides });` : ""}
+    React.useEffect(() => {
+      const handleMessage = (event) => {
+        const data = event.data;
+        if (data?.type !== "${messageType}" || data?.editorId !== editorId) return;
 
-        setOverrides(newOverrides);
+        const newOverrides = data.overrides;
+        ${debug ? `console.log("[BridgeWrapper]", "Received:", { editorId, newOverrides });` : ""}
+
+        ensureGlobal();
+
+        if (newOverrides === null) {
+          setOverrides({});
+          delete window.__elementOverrides[editorId];
+          ${debug ? `console.log("[BridgeWrapper]", "Reset to original:", { editorId });` : ""}
+        } else {
+          setOverrides(newOverrides || {});
+        }
+      };
+
+      if (typeof window !== "undefined") {
+        window.addEventListener("message", handleMessage);
+        return () => window.removeEventListener("message", handleMessage);
       }
+    }, [editorId]);
+
+    const count = React.Children.count(children);
+    if (count !== 1) return <>{children}</>;
+
+    const onlyChild = React.Children.only(children);
+    if (!React.isValidElement(onlyChild)) return <>{onlyChild}</>;
+
+    if (!overrides || Object.keys(overrides).length === 0) {
+      ensureGlobal();
+      delete window.__elementOverrides[editorId];
+      ${debug ? `console.log("[BridgeWrapper]", "No overrides:", { editorId });` : ""}
+      return children;
+    }
+
+    const originalProps = onlyChild.props ?? {};
+    const { children: overrideChildren, attributes, ...directOverrides } = overrides;
+    const attributeOverrides = { ...(attributes ?? {}), ...directOverrides };
+
+    const mergeStyles = (original, override) => {
+      if (typeof override !== "object" || typeof original !== "object") return override;
+      return { ...(original || {}), ...override };
     };
 
-    if (typeof window !== "undefined") {
-      window.addEventListener("message", handleMessage);
-      return () => window.removeEventListener("message", handleMessage);
+    const mergedStyle = attributeOverrides.style !== undefined
+      ? mergeStyles(originalProps.style, attributeOverrides.style)
+      : originalProps.style;
+
+    ${
+      debug
+        ? `
+    console.log("[BridgeWrapper]", "Style merge:", {
+      editorId,
+      original: originalProps.style,
+      override: attributeOverrides.style,
+      merged: mergedStyle
+    });
+    `
+        : ""
     }
-  }, [editorId]);
 
-  if (React.Children.count(children) !== 1) {
-    return React.createElement(React.Fragment, null, children);
-  }
+    const mergedProps = {
+      ...originalProps,
+      ...attributeOverrides,
+      ...(mergedStyle !== undefined && { style: mergedStyle }),
+    };
 
-  const onlyChild = React.Children.only(children);
+    const finalChildren = overrideChildren ?? originalProps.children ?? null;
 
-  if (!React.isValidElement(onlyChild)) {
-    return React.createElement(React.Fragment, null, onlyChild);
-  }
-
-  const originalProps = onlyChild.props ?? {};
-
-  const { children: overrideChildren, attributes, ...directOverrides } = overrides;
-
-  const attributeOverrides = {
-    ...(attributes ?? {}),
-    ...directOverrides,
-  };
-
-  let mergedStyle = originalProps.style;
-  if (attributeOverrides.style !== undefined) {
-    const originalStyle = originalProps.style;
-    const overrideStyle = attributeOverrides.style;
-    
-    mergedStyle = typeof overrideStyle === 'object' && typeof originalStyle === 'object'
-      ? { ...(originalStyle ?? {}), ...overrideStyle }
-      : overrideStyle;
-    
-    ${options.debugger ? `console.log("[BridgeWrapper]", "Style merging:", { 
-      editorId, 
-      originalStyle, 
-      overrideStyle, 
-      mergedStyle,
-      mergeType: typeof overrideStyle === 'object' && typeof originalStyle === 'object' ? 'object-merge' : 'complete-replace'
-    });` : ""}
-  }
-
-  const mergedProps = {
-    ...originalProps,
-    ...attributeOverrides,
-    ...(mergedStyle !== undefined && { style: mergedStyle }),
-  };
-
-  const finalChildren = overrideChildren !== undefined
-    ? overrideChildren
-    : originalProps.children ?? null;
-
-  // Save snapshot of final merged props to global state
-  if (typeof window !== "undefined") {
-    if (!window.__elementOverrides) {
-      window.__elementOverrides = {};
-    }
+    ensureGlobal();
     window.__elementOverrides[editorId] = { ...mergedProps, children: finalChildren };
-    
-    ${options.debugger ? `console.log("[BridgeWrapper]", "Global state snapshot:", { 
-      editorId, 
-      mergedProps, 
+
+    ${
+      debug
+        ? `
+    console.log("[BridgeWrapper]", "Global snapshot:", {
+      editorId,
+      mergedProps,
       finalChildren,
-      globalSnapshot: window.__elementOverrides[editorId]
-    });` : ""}
+      snapshot: window.__elementOverrides[editorId]
+    });
+    `
+        : ""
+    }
+
+    return React.cloneElement(onlyChild, mergedProps, finalChildren);
   }
-
-  return React.cloneElement(onlyChild, mergedProps, finalChildren);
-}
-
-`;
+  `;
 
     const ast = parse(bridgeWrapperCode, {
       sourceType: "module",

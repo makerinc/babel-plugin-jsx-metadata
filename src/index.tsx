@@ -675,15 +675,6 @@ function BridgeWrapper({ editorId, children }) {
         
         ${options.debugger ? `console.log("[BridgeWrapper]", "Message received:", { editorId, messageType: event.data.type, overrides: newOverrides });` : ""}
 
-        if (typeof window !== "undefined") {
-          if (!window.__elementOverrides) {
-            window.__elementOverrides = {};
-          }
-          window.__elementOverrides[editorId] = newOverrides;
-          
-          ${options.debugger ? `console.log("[BridgeWrapper]", "Global state updated:", { editorId, globalState: window.__elementOverrides });` : ""}
-        }
-
         setOverrides(newOverrides);
       }
     };
@@ -740,6 +731,21 @@ function BridgeWrapper({ editorId, children }) {
   const finalChildren = overrideChildren !== undefined
     ? overrideChildren
     : originalProps.children ?? null;
+
+  // Save snapshot of final merged props to global state
+  if (typeof window !== "undefined") {
+    if (!window.__elementOverrides) {
+      window.__elementOverrides = {};
+    }
+    window.__elementOverrides[editorId] = { ...mergedProps, children: finalChildren };
+    
+    ${options.debugger ? `console.log("[BridgeWrapper]", "Global state snapshot:", { 
+      editorId, 
+      mergedProps, 
+      finalChildren,
+      globalSnapshot: window.__elementOverrides[editorId]
+    });` : ""}
+  }
 
   return React.cloneElement(onlyChild, mergedProps, finalChildren);
 }

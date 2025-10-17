@@ -511,6 +511,7 @@ namespace AttachBridge {
     filename?: string;
     skipFiles?: string[];
     messageType?: string;
+    debugger?: boolean;
   };
 
   export function attachBridge(
@@ -656,8 +657,11 @@ function BridgeWrapper({ editorId, children }) {
 
   const [overrides, setOverrides] = React.useState(() => {
     if (typeof window !== "undefined" && window.__elementOverrides) {
-      return window.__elementOverrides[editorId] || {};
+      const storedOverrides = window.__elementOverrides[editorId] || {};
+      ${options.debugger ? `console.log("[BridgeWrapper]", "Initialized from global state:", { editorId, storedOverrides });` : ""}
+      return storedOverrides;
     }
+    ${options.debugger ? `console.log("[BridgeWrapper]", "Initialized with empty state:", { editorId });` : ""}
     return {};
   });
 
@@ -668,12 +672,16 @@ function BridgeWrapper({ editorId, children }) {
         event.data?.editorId === editorId
       ) {
         const newOverrides = event.data.overrides || {};
+        
+        ${options.debugger ? `console.log("[BridgeWrapper]", "Message received:", { editorId, messageType: event.data.type, overrides: newOverrides });` : ""}
 
         if (typeof window !== "undefined") {
           if (!window.__elementOverrides) {
             window.__elementOverrides = {};
           }
           window.__elementOverrides[editorId] = newOverrides;
+          
+          ${options.debugger ? `console.log("[BridgeWrapper]", "Global state updated:", { editorId, globalState: window.__elementOverrides });` : ""}
         }
 
         setOverrides(newOverrides);

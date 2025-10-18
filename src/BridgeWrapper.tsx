@@ -45,9 +45,6 @@ export function BridgeWrapper({
   const [overrides, setOverrides] = React.useState<ElementOverrides>(() => {
     ensureGlobal();
     const stored = window.__elementOverrides?.[editorId] || {};
-    if (debug) {
-      console.log("[BridgeWrapper]", "Init:", { editorId, stored });
-    }
     return stored;
   });
 
@@ -61,8 +58,6 @@ export function BridgeWrapper({
       if (debug) {
         console.log("[BridgeWrapper]", "Received:", { editorId, newOverrides });
       }
-
-      ensureGlobal();
 
       if (newOverrides === null) {
         setOverrides({});
@@ -81,7 +76,7 @@ export function BridgeWrapper({
       window.addEventListener("message", handleMessage);
       return () => window.removeEventListener("message", handleMessage);
     }
-  }, [editorId]);
+  }, [editorId, debug]);
 
   const count = React.Children.count(children);
   if (count !== 1) return <>{children}</>;
@@ -105,7 +100,7 @@ export function BridgeWrapper({
     style?: React.CSSProperties | string;
     children?: React.ReactNode;
   };
-  
+
   const originalProps = onlyChild.props as ElementProps;
   const {
     children: overrideChildren,

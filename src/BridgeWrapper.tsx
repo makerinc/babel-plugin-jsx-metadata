@@ -89,9 +89,6 @@ export function BridgeWrapper({
     if (window.__elementOverrides) {
       delete window.__elementOverrides[editorId];
     }
-    if (debug) {
-      console.log("[BridgeWrapper]", "No overrides:", { editorId });
-    }
     return children;
   }
 

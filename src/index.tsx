@@ -3,6 +3,9 @@ import crypto from "node:crypto";
 import type { NodePath } from "@babel/traverse";
 import { type PluginObj, types as t } from "@babel/core";
 import { parse } from "@babel/parser";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   CallExpression,
   JSXAttribute,
@@ -549,7 +552,7 @@ namespace AttachBridge {
             hasDataEditorId(jsxElement) &&
             !isAlreadyWrapped(path)
           ) {
-            wrapWithBridge(path);
+            wrapWithBridge(path, options);
           }
         },
       },
@@ -582,7 +585,10 @@ namespace AttachBridge {
     );
   }
 
-  function wrapWithBridge(path: NodePath<JSXElement>): void {
+  function wrapWithBridge(
+    path: NodePath<JSXElement>,
+    options: BridgeOptions,
+  ): void {
     const original = path.node;
 
     const editorIdAttr = original.openingElement.attributes.find(
@@ -595,19 +601,31 @@ namespace AttachBridge {
     if (!editorIdAttr || !t.isStringLiteral(editorIdAttr.value)) return;
 
     const editorId = editorIdAttr.value.value;
+    const debug = !!options.debugger;
 
     const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
 
-    const bridgeElement = t.jsxElement(
-      t.jsxOpeningElement(t.jsxIdentifier("BridgeWrapper"), [
-        t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),
-        t.jsxAttribute(
-          t.jsxIdentifier("originalElement"),
-          t.jsxExpressionContainer(
-            t.stringLiteral(getBridgeElementTagName(original)),
-          ),
+    const attributes = [
+      t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),
+      t.jsxAttribute(
+        t.jsxIdentifier("originalElement"),
+        t.jsxExpressionContainer(
+          t.stringLiteral(getBridgeElementTagName(original)),
         ),
-      ]),
+      ),
+    ];
+
+    if (debug) {
+      attributes.push(
+        t.jsxAttribute(
+          t.jsxIdentifier("debug"),
+          t.jsxExpressionContainer(t.booleanLiteral(true)),
+        ),
+      );
+    }
+
+    const bridgeElement = t.jsxElement(
+      t.jsxOpeningElement(t.jsxIdentifier("BridgeWrapper"), attributes),
       t.jsxClosingElement(t.jsxIdentifier("BridgeWrapper")),
       [cloned],
     );
@@ -642,122 +660,64 @@ namespace AttachBridge {
     );
   }
 
+  function getBridgeWrapperCode(
+    needsReactImport: boolean,
+    messageType: string,
+  ): string {
+    try {
+      // Read the compiled BridgeWrapper from dist
+      const currentDir =
+        typeof __dirname !== "undefined"
+          ? __dirname
+          : dirname(fileURLToPath(import.meta.url));
+      const compiledPath = join(currentDir, "../dist/BridgeWrapper.js");
+      let bridgeWrapperCode = readFileSync(compiledPath, "utf8");
+
+      // Remove imports/exports and JSX runtime imports
+      bridgeWrapperCode = bridgeWrapperCode
+        .replace(/import.*from.*["']react\/jsx-runtime["'];?\n?/g, "")
+        .replace(/import.*from.*["']react["'];?\n?/g, "")
+        .replace(/export\s+/g, "")
+        .replace(/\/\/# sourceMappingURL=.*$/m, "")
+        .trim();
+
+      // Replace message type
+      bridgeWrapperCode = bridgeWrapperCode.replace(
+        /"ELEMENT_UPDATE"/g,
+        `"${messageType}"`,
+      );
+
+      // Convert JSX runtime calls back to JSX for consistency
+      bridgeWrapperCode = bridgeWrapperCode
+        .replace(
+          /_jsx\(_Fragment, \{ children: children \}\)/g,
+          "<>{children}</>",
+        )
+        .replace(
+          /_jsx\(_Fragment, \{ children: onlyChild \}\)/g,
+          "<>{onlyChild}</>",
+        );
+
+      return `${needsReactImport ? 'import React from "react";' : ""}
+
+${bridgeWrapperCode}`;
+    } catch (error) {
+      console.error("Failed to read compiled BridgeWrapper:", error);
+      throw new Error("Could not load BridgeWrapper source");
+    }
+  }
+
   function addBridgeWrapperCode(
     programPath: NodePath<t.Program>,
     options: BridgeOptions,
   ) {
     const needsReactImport = !hasExistingReactImport(programPath);
     const messageType = options.messageType || "ELEMENT_UPDATE";
-    const debug = !!options.debugger;
 
-    const bridgeWrapperCode = `
-  ${needsReactImport ? 'import React from "react";' : ""}
-
-  function BridgeWrapper({ editorId, children }) {
-    const ensureGlobal = () => {
-      if (typeof window === "undefined") return;
-      window.__elementOverrides = window.__elementOverrides || {};
-    };
-    ensureGlobal();
-
-    const [overrides, setOverrides] = React.useState(() => {
-      ensureGlobal();
-      const stored = window.__elementOverrides?.[editorId] || {};
-      ${debug ? `console.log("[BridgeWrapper]", "Init:", { editorId, stored });` : ""}
-      return stored;
-    });
-
-    React.useEffect(() => {
-      const handleMessage = (event) => {
-        const data = event.data;
-        if (data?.type !== "${messageType}" || data?.editorId !== editorId) return;
-
-        const newOverrides = data.overrides;
-        ${debug ? `console.log("[BridgeWrapper]", "Received:", { editorId, newOverrides });` : ""}
-
-        ensureGlobal();
-
-        if (newOverrides === null) {
-          setOverrides({});
-          delete window.__elementOverrides[editorId];
-          ${debug ? `console.log("[BridgeWrapper]", "Reset to original:", { editorId });` : ""}
-        } else {
-          setOverrides(newOverrides || {});
-        }
-      };
-
-      if (typeof window !== "undefined") {
-        window.addEventListener("message", handleMessage);
-        return () => window.removeEventListener("message", handleMessage);
-      }
-    }, [editorId]);
-
-    const count = React.Children.count(children);
-    if (count !== 1) return <>{children}</>;
-
-    const onlyChild = React.Children.only(children);
-    if (!React.isValidElement(onlyChild)) return <>{onlyChild}</>;
-
-    if (!overrides || Object.keys(overrides).length === 0) {
-      ensureGlobal();
-      delete window.__elementOverrides[editorId];
-      ${debug ? `console.log("[BridgeWrapper]", "No overrides:", { editorId });` : ""}
-      return children;
-    }
-
-    const originalProps = onlyChild.props ?? {};
-    const { children: overrideChildren, attributes, ...directOverrides } = overrides;
-    const attributeOverrides = { ...(attributes ?? {}), ...directOverrides };
-
-    const mergeStyles = (original, override) => {
-      if (typeof override !== "object" || typeof original !== "object") return override;
-      return { ...(original || {}), ...override };
-    };
-
-    const mergedStyle = attributeOverrides.style !== undefined
-      ? mergeStyles(originalProps.style, attributeOverrides.style)
-      : originalProps.style;
-
-    ${
-      debug
-        ? `
-    console.log("[BridgeWrapper]", "Style merge:", {
-      editorId,
-      original: originalProps.style,
-      override: attributeOverrides.style,
-      merged: mergedStyle
-    });
-    `
-        : ""
-    }
-
-    const mergedProps = {
-      ...originalProps,
-      ...attributeOverrides,
-      ...(mergedStyle !== undefined && { style: mergedStyle }),
-    };
-
-    const finalChildren = overrideChildren ?? originalProps.children ?? null;
-
-    ensureGlobal();
-    window.__elementOverrides[editorId] = { ...mergedProps, children: finalChildren };
-
-    ${
-      debug
-        ? `
-    console.log("[BridgeWrapper]", "Global snapshot:", {
-      editorId,
-      mergedProps,
-      finalChildren,
-      snapshot: window.__elementOverrides[editorId]
-    });
-    `
-        : ""
-    }
-
-    return React.cloneElement(onlyChild, mergedProps, finalChildren);
-  }
-  `;
+    const bridgeWrapperCode = getBridgeWrapperCode(
+      needsReactImport,
+      messageType,
+    );
 
     const ast = parse(bridgeWrapperCode, {
       sourceType: "module",
@@ -773,6 +733,7 @@ namespace AttachBridge {
   }
 }
 
+export type { ElementOverrides, BridgeMessage } from "./BridgeWrapper";
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;
 export type MetadataOptions = AttachMetadata.MetadataOptions;

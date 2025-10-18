@@ -1,7 +1,7 @@
 import React from "react";
 
 export interface ElementOverrides {
-  children?: React.ReactNode;
+  children?: React.ReactNode | string;
   attributes?: Record<string, string | number | boolean>;
   className?: string;
   style?: React.CSSProperties | string;

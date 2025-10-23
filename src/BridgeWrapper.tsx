@@ -120,11 +120,9 @@ export function BridgeWrapper({
         update.editorId === editorId && update.filePath === elementFilePath
       );
       
-      if (relevantUpdates.length === 0) {
-        return;
-      }
-      
-      const newOverrides = mergeOverrides(relevantUpdates.map(u => u.overrides));
+      const newOverrides = relevantUpdates.length === 0 
+        ? null 
+        : mergeOverrides(relevantUpdates.map(u => u.overrides));
       
       if (debug) {
         console.log("[BridgeWrapper]", "Element update received:", { 

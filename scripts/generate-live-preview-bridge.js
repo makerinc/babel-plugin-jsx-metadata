@@ -2,7 +2,6 @@
 
 const fs = require("fs");
 const path = require("path");
-const { minify } = require("terser");
 
 async function generateMinifiedLivePreviewBridge() {
   try {
@@ -23,40 +22,21 @@ async function generateMinifiedLivePreviewBridge() {
     // Add React import
     bridgeWrapperCode = `import React from "react";\n\n${bridgeWrapperCode}`;
 
-    console.log("Minifying code...");
+    console.log("Compacting code...");
 
-    // First, transform JSX to regular JS calls
+    // Transform JSX to regular JS calls with compact output
     const { transformSync } = require("@babel/core");
     const transformedCode = transformSync(bridgeWrapperCode, {
       presets: [["@babel/preset-react", { runtime: "automatic" }]],
-      compact: false,
+      compact: true,
+      minified: true,
     });
 
     if (!transformedCode || !transformedCode.code) {
       throw new Error("Failed to transform JSX");
     }
 
-    // Then minify the transformed code
-    const minified = await minify(transformedCode.code, {
-      compress: {
-        drop_console: false, // Keep console.log for debugging
-        drop_debugger: true,
-        passes: 2,
-      },
-      mangle: {
-        reserved: ["LivePreviewBridge", "React"], // Keep important names
-      },
-      format: {
-        comments: false,
-        beautify: false,
-      },
-    });
-
-    if (minified.error) {
-      throw minified.error;
-    }
-
-    const minifiedCode = minified.code;
+    const minifiedCode = transformedCode.code;
 
     // Update the compiled index.js file to include the actual minified code
     const indexJsPath = path.join(__dirname, "../dist/index.js");

@@ -49,7 +49,7 @@ function propsProcessor(
   if (name === "ImageOptimizer") {
     return {
       ...props,
-      originalProps: { ...(props?.originalProps || {}), props },
+      originalProps: { ...(props?.originalProps || {}), ...props },
     };
   } else {
     return props;

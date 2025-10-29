@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { transformSync } = require("@babel/core");
 
 async function generateMinifiedLivePreviewBridge() {
   try {
@@ -25,7 +26,6 @@ async function generateMinifiedLivePreviewBridge() {
     console.log("Compacting code...");
 
     // Transform JSX to regular JS calls with compact output
-    const { transformSync } = require("@babel/core");
     const transformedCode = transformSync(bridgeWrapperCode, {
       presets: [["@babel/preset-react", { runtime: "automatic" }]],
       compact: true,

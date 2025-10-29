@@ -11,7 +11,7 @@ async function generateMinifiedLivePreviewBridge() {
     // Read the LivePreviewBridge source directly
     const bridgePath = path.join(__dirname, "../dist/LivePreviewBridge.js");
     let bridgeWrapperCode = fs.readFileSync(bridgePath, "utf8");
-    
+
     // Remove imports/exports and JSX runtime imports
     bridgeWrapperCode = bridgeWrapperCode
       .replace(/import.*from.*["']react\/jsx-runtime["'];?\n?/g, "")
@@ -19,7 +19,7 @@ async function generateMinifiedLivePreviewBridge() {
       .replace(/export\s+/g, "")
       .replace(/\/\/# sourceMappingURL=.*$/m, "")
       .trim();
-      
+
     // Add React import
     bridgeWrapperCode = `import React from "react";\n\n${bridgeWrapperCode}`;
 
@@ -61,13 +61,13 @@ async function generateMinifiedLivePreviewBridge() {
     // Update the compiled index.js file to include the actual minified code
     const indexJsPath = path.join(__dirname, "../dist/index.js");
     let indexContent = fs.readFileSync(indexJsPath, "utf8");
-    
+
     // Replace the empty string with the actual minified code
     indexContent = indexContent.replace(
       'export const LivePreviewBridgeSource = "";',
-      `export const LivePreviewBridgeSource = ${JSON.stringify(minifiedCode)};`
+      `export const LivePreviewBridgeSource = ${JSON.stringify(minifiedCode)};`,
     );
-    
+
     fs.writeFileSync(indexJsPath, indexContent);
 
     console.log(

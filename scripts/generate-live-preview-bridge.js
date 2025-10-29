@@ -4,11 +4,11 @@ const fs = require("fs");
 const path = require("path");
 const { transformSync } = require("@babel/core");
 
-async function generateMinifiedLivePreviewBridge() {
+function generateMinifiedLivePreviewBridge() {
   try {
     console.log("Generating LivePreviewBridgeSource.js...");
 
-    // Read the LivePreviewBridge source directly  
+    // Read the LivePreviewBridge source directly
     const bridgePath = path.join(__dirname, "../dist/LivePreviewBridge.js");
     const bridgeWrapperCode = fs.readFileSync(bridgePath, "utf8");
 

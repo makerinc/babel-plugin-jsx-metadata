@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+
+const fs = require("fs");
+const path = require("path");
+const { minify } = require("terser");
+
+async function generateMinifiedLivePreviewBridge() {
+  try {
+    console.log("Generating LivePreviewBridgeSource.js...");
+
+    // Read the LivePreviewBridge source directly
+    const bridgePath = path.join(__dirname, "../dist/LivePreviewBridge.js");
+    let bridgeWrapperCode = fs.readFileSync(bridgePath, "utf8");
+    
+    // Remove imports/exports and JSX runtime imports
+    bridgeWrapperCode = bridgeWrapperCode
+      .replace(/import.*from.*["']react\/jsx-runtime["'];?\n?/g, "")
+      .replace(/import.*from.*["']react["'];?\n?/g, "")
+      .replace(/export\s+/g, "")
+      .replace(/\/\/# sourceMappingURL=.*$/m, "")
+      .trim();
+      
+    // Add React import
+    bridgeWrapperCode = `import React from "react";\n\n${bridgeWrapperCode}`;
+
+    console.log("Minifying code...");
+
+    // First, transform JSX to regular JS calls
+    const { transformSync } = require("@babel/core");
+    const transformedCode = transformSync(bridgeWrapperCode, {
+      presets: [["@babel/preset-react", { runtime: "automatic" }]],
+      compact: false,
+    });
+
+    if (!transformedCode || !transformedCode.code) {
+      throw new Error("Failed to transform JSX");
+    }
+
+    // Then minify the transformed code
+    const minified = await minify(transformedCode.code, {
+      compress: {
+        drop_console: false, // Keep console.log for debugging
+        drop_debugger: true,
+        passes: 2,
+      },
+      mangle: {
+        reserved: ["LivePreviewBridge", "React"], // Keep important names
+      },
+      format: {
+        comments: false,
+        beautify: false,
+      },
+    });
+
+    if (minified.error) {
+      throw minified.error;
+    }
+
+    const minifiedCode = minified.code;
+
+    // Update the compiled index.js file to include the actual minified code
+    const indexJsPath = path.join(__dirname, "../dist/index.js");
+    let indexContent = fs.readFileSync(indexJsPath, "utf8");
+    
+    // Replace the empty string with the actual minified code
+    indexContent = indexContent.replace(
+      'export const LivePreviewBridgeSource = "";',
+      `export const LivePreviewBridgeSource = ${JSON.stringify(minifiedCode)};`
+    );
+    
+    fs.writeFileSync(indexJsPath, indexContent);
+
+    console.log(
+      `✅ LivePreviewBridgeSource updated successfully in ${indexJsPath}`,
+    );
+    console.log(
+      `📦 Original size: ${(bridgeWrapperCode.length / 1024).toFixed(2)} KB`,
+    );
+    console.log(
+      `📦 Minified size: ${(minifiedCode.length / 1024).toFixed(2)} KB`,
+    );
+    console.log(
+      `📦 Compression: ${((1 - minifiedCode.length / bridgeWrapperCode.length) * 100).toFixed(1)}%`,
+    );
+  } catch (error) {
+    console.error("❌ Failed to generate LivePreviewBridge.js:", error.message);
+    process.exit(1);
+  }
+}
+
+generateMinifiedLivePreviewBridge();

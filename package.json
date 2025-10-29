@@ -9,15 +9,10 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "/generatedBridgeWrapper.js": {
-      "import": "./dist/generatedBridgeWrapper.js",
-      "require": "./dist/generatedBridgeWrapper.js",
-      "types": "./dist/BridgeWrapper.d.ts"
     }
   },
   "scripts": {
-    "build": "tsc && node scripts/generate-bridge-wrapper.js",
+    "build": "tsc && node scripts/generate-live-preview-bridge.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

@@ -2,9 +2,6 @@ import type { ConfigAPI } from "@babel/core";
 import crypto from "node:crypto";
 import type { NodePath } from "@babel/traverse";
 import { type PluginObj, types as t } from "@babel/core";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import type {
   CallExpression,
   JSXAttribute,
@@ -514,7 +511,7 @@ namespace AttachBridge {
     skipFiles?: string[];
     debugger?: boolean;
     messageType?: string;
-    componentPath?: string; // Optional - path to user's BridgeWrapper
+    componentPath?: string; // Optional - path to user's LivePreviewBridge
   };
 
   export function attachBridge(
@@ -539,8 +536,11 @@ namespace AttachBridge {
       name: "babel-plugin-jsx-bridge",
       visitor: {
         Program(path) {
-          if (options.componentPath && !hasExistingBridgeWrapperImport(path)) {
-            addBridgeWrapperImport(path, options.componentPath);
+          if (
+            options.componentPath &&
+            !hasExistingLivePreviewBridgeImport(path)
+          ) {
+            addLivePreviewBridgeImport(path, options.componentPath);
           }
         },
         JSXElement(path: NodePath<JSXElement>) {
@@ -580,7 +580,7 @@ namespace AttachBridge {
     return !!(
       parent?.isJSXElement() &&
       t.isJSXIdentifier(parent.node.openingElement.name) &&
-      parent.node.openingElement.name.name === "BridgeWrapper"
+      parent.node.openingElement.name.name === "LivePreviewBridge"
     );
   }
 
@@ -656,15 +656,15 @@ namespace AttachBridge {
     }
 
     const bridgeElement = t.jsxElement(
-      t.jsxOpeningElement(t.jsxIdentifier("BridgeWrapper"), attributes),
-      t.jsxClosingElement(t.jsxIdentifier("BridgeWrapper")),
+      t.jsxOpeningElement(t.jsxIdentifier("LivePreviewBridge"), attributes),
+      t.jsxClosingElement(t.jsxIdentifier("LivePreviewBridge")),
       [cloned],
     );
 
     path.replaceWith(bridgeElement);
   }
 
-  function hasExistingBridgeWrapperImport(
+  function hasExistingLivePreviewBridgeImport(
     programPath: NodePath<t.Program>,
   ): boolean {
     const body = programPath.node.body;
@@ -674,67 +674,28 @@ namespace AttachBridge {
         node.specifiers.some(
           (spec) =>
             t.isImportDefaultSpecifier(spec) &&
-            spec.local.name === "BridgeWrapper",
+            spec.local.name === "LivePreviewBridge",
         ),
     );
   }
 
-  function addBridgeWrapperImport(
+  function addLivePreviewBridgeImport(
     programPath: NodePath<t.Program>,
     componentPath: string,
   ) {
     const importDeclaration = t.importDeclaration(
-      [t.importDefaultSpecifier(t.identifier("BridgeWrapper"))],
+      [t.importDefaultSpecifier(t.identifier("LivePreviewBridge"))],
       t.stringLiteral(componentPath),
     );
 
     programPath.unshiftContainer("body", importDeclaration);
   }
-
-  export function generateBridgeWrapperFile(): string {
-    try {
-      const currentDir =
-        typeof __dirname !== "undefined"
-          ? __dirname
-          : dirname(fileURLToPath(import.meta.url));
-      const compiledPath = join(currentDir, "BridgeWrapper.js");
-      let bridgeWrapperCode = readFileSync(compiledPath, "utf8");
-
-      // Remove imports/exports and JSX runtime imports
-      bridgeWrapperCode = bridgeWrapperCode
-        .replace(/import.*from.*["']react\/jsx-runtime["'];?\n?/g, "")
-        .replace(/import.*from.*["']react["'];?\n?/g, "")
-        .replace(/export\s+/g, "")
-        .replace(/\/\/# sourceMappingURL=.*$/m, "")
-        .trim();
-
-      // Convert JSX runtime calls back to JSX for consistency
-      bridgeWrapperCode = bridgeWrapperCode
-        .replace(
-          /_jsx\(_Fragment, \{ children: children \}\)/g,
-          "<>{children}</>",
-        )
-        .replace(
-          /_jsx\(_Fragment, \{ children: onlyChild \}\)/g,
-          "<>{onlyChild}</>",
-        );
-
-      return `import React from "react";
-
-${bridgeWrapperCode}
-
-export { BridgeWrapper };
-export default BridgeWrapper;`;
-    } catch (error) {
-      console.error("Failed to read compiled BridgeWrapper:", error);
-      throw new Error("Could not load BridgeWrapper source");
-    }
-  }
 }
 
-export type { ElementOverrides, BridgeMessage } from "./BridgeWrapper";
+export type { ElementOverrides, BridgeMessage } from "./LivePreviewBridge";
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;
-export const generateBridgeWrapperFile = AttachBridge.generateBridgeWrapperFile;
+// Export the minified LivePreviewBridge source - this will be populated by the build script
+export const LivePreviewBridgeSource = "";
 export type MetadataOptions = AttachMetadata.MetadataOptions;
 export type BridgeOptions = AttachBridge.BridgeOptions;

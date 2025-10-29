@@ -29,7 +29,7 @@ export interface BridgeMessage {
   updates: ElementUpdate[];
 }
 
-export interface BridgeWrapperProps {
+export interface LivePreviewBridgeProps {
   editorId: string;
   children: React.ReactNode;
   debug?: boolean;
@@ -137,13 +137,13 @@ function getElementFilePath(editorId: string): string | null {
 }
 
 
-export function BridgeWrapper({
+export function LivePreviewBridge({
   editorId,
   children,
   debug,
   messageType = "ELEMENT_UPDATE",
   componentName = "Unknown",
-}: BridgeWrapperProps) {
+}: LivePreviewBridgeProps) {
   const [overrides, setOverrides] = React.useState<ElementOverrides>(() =>
     getStoredOverrides(editorId),
   );
@@ -165,7 +165,7 @@ export function BridgeWrapper({
       );
 
       debug &&
-        console.log("[BridgeWrapper]", {
+        console.log("[LivePreviewBridge]", {
           editorId,
           newOverrides,
           count: relevantUpdates.length,
@@ -213,7 +213,7 @@ export function BridgeWrapper({
     children: finalChildren,
   });
   debug &&
-    console.log("[BridgeWrapper] Applied:", {
+    console.log("[LivePreviewBridge] Applied:", {
       editorId,
       props: processedProps,
     });

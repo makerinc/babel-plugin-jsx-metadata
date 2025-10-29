@@ -584,34 +584,6 @@ namespace AttachBridge {
     );
   }
 
-  function findComponentName(path: NodePath<JSXElement>): string {
-    // Traverse up the AST to find the containing function/component
-    let currentPath: NodePath | null = path;
-
-    while (currentPath) {
-      if (currentPath.isFunctionDeclaration()) {
-        if (currentPath.node.id && t.isIdentifier(currentPath.node.id)) {
-          return currentPath.node.id.name;
-        }
-      }
-
-      if (currentPath.isVariableDeclarator()) {
-        if (currentPath.node.id && t.isIdentifier(currentPath.node.id)) {
-          // Check if this is a function expression or arrow function
-          if (
-            t.isArrowFunctionExpression(currentPath.node.init) ||
-            t.isFunctionExpression(currentPath.node.init)
-          ) {
-            return currentPath.node.id.name;
-          }
-        }
-      }
-
-      currentPath = currentPath.parentPath;
-    }
-
-    return "Unknown";
-  }
 
   function wrapWithBridge(
     path: NodePath<JSXElement>,
@@ -631,7 +603,6 @@ namespace AttachBridge {
     const editorId = editorIdAttr.value.value;
     const debug = !!options.debugger;
     const messageType = options.messageType || "ELEMENT_UPDATE";
-    const componentName = findComponentName(path);
     const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
 
     const attributes = [
@@ -639,10 +610,6 @@ namespace AttachBridge {
       t.jsxAttribute(
         t.jsxIdentifier("messageType"),
         t.stringLiteral(messageType),
-      ),
-      t.jsxAttribute(
-        t.jsxIdentifier("componentName"),
-        t.stringLiteral(componentName),
       ),
     ];
 

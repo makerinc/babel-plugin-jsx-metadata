@@ -695,7 +695,8 @@ namespace AttachBridge {
 export type { ElementOverrides, BridgeMessage } from "./LivePreviewBridge";
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;
-// Export the minified LivePreviewBridge source - this will be populated by the build script
-export const LivePreviewBridgeSource = "";
 export type MetadataOptions = AttachMetadata.MetadataOptions;
 export type BridgeOptions = AttachBridge.BridgeOptions;
+
+// Auto-generated source code of LivePreviewBridge component
+export const LivePreviewBridgeSource = "";

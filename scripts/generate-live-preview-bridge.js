@@ -8,20 +8,9 @@ async function generateMinifiedLivePreviewBridge() {
   try {
     console.log("Generating LivePreviewBridgeSource.js...");
 
-    // Read the LivePreviewBridge source directly
+    // Read the LivePreviewBridge source directly  
     const bridgePath = path.join(__dirname, "../dist/LivePreviewBridge.js");
-    let bridgeWrapperCode = fs.readFileSync(bridgePath, "utf8");
-
-    // Remove imports/exports and JSX runtime imports
-    bridgeWrapperCode = bridgeWrapperCode
-      .replace(/import.*from.*["']react\/jsx-runtime["'];?\n?/g, "")
-      .replace(/import.*from.*["']react["'];?\n?/g, "")
-      .replace(/export\s+/g, "")
-      .replace(/\/\/# sourceMappingURL=.*$/m, "")
-      .trim();
-
-    // Add React import
-    bridgeWrapperCode = `import React from "react";\n\n${bridgeWrapperCode}`;
+    const bridgeWrapperCode = fs.readFileSync(bridgePath, "utf8");
 
     console.log("Compacting code...");
 

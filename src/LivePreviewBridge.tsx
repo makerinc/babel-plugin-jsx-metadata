@@ -136,8 +136,7 @@ function getElementFilePath(editorId: string): string | null {
   );
 }
 
-
-export function LivePreviewBridge({
+function LivePreviewBridge({
   editorId,
   children,
   debug,
@@ -220,3 +219,5 @@ export function LivePreviewBridge({
 
   return React.cloneElement(child, processedProps, finalChildren);
 }
+
+export default LivePreviewBridge;

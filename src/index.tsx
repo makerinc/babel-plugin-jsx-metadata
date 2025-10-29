@@ -587,14 +587,14 @@ namespace AttachBridge {
   function findComponentName(path: NodePath<JSXElement>): string {
     // Traverse up the AST to find the containing function/component
     let currentPath: NodePath | null = path;
-    
+
     while (currentPath) {
       if (currentPath.isFunctionDeclaration()) {
         if (currentPath.node.id && t.isIdentifier(currentPath.node.id)) {
           return currentPath.node.id.name;
         }
       }
-      
+
       if (currentPath.isVariableDeclarator()) {
         if (currentPath.node.id && t.isIdentifier(currentPath.node.id)) {
           // Check if this is a function expression or arrow function
@@ -606,10 +606,10 @@ namespace AttachBridge {
           }
         }
       }
-      
+
       currentPath = currentPath.parentPath;
     }
-    
+
     return "Unknown";
   }
 
@@ -636,8 +636,14 @@ namespace AttachBridge {
 
     const attributes = [
       t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),
-      t.jsxAttribute(t.jsxIdentifier("messageType"), t.stringLiteral(messageType)),
-      t.jsxAttribute(t.jsxIdentifier("componentName"), t.stringLiteral(componentName)),
+      t.jsxAttribute(
+        t.jsxIdentifier("messageType"),
+        t.stringLiteral(messageType),
+      ),
+      t.jsxAttribute(
+        t.jsxIdentifier("componentName"),
+        t.stringLiteral(componentName),
+      ),
     ];
 
     if (debug) {

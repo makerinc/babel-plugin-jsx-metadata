@@ -9,6 +9,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "/generatedBridgeWrapper.js": {
+      "import": "./dist/generatedBridgeWrapper.js",
+      "require": "./dist/generatedBridgeWrapper.js",
+      "types": "./dist/BridgeWrapper.d.ts"
     }
   },
   "scripts": {

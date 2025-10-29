@@ -42,20 +42,6 @@ declare global {
   }
 }
 
-function propsProcessor(
-  name: string,
-  props: Record<string, unknown>,
-): Record<string, unknown> {
-  if (name === "ImageOptimizer") {
-    return {
-      ...props,
-      originalProps: { ...(props?.originalProps || {}), ...props },
-    };
-  } else {
-    return props;
-  }
-}
-
 // Global state helpers
 function ensureGlobalOverrides(): void {
   if (typeof window !== "undefined") {
@@ -138,19 +124,6 @@ function getElementFilePath(editorId: string): string | null {
   );
 }
 
-// Helper function to get component name from child element
-function getComponentName(child: React.ReactElement): string {
-  if (typeof child.type === "string") {
-    // HTML element like 'div', 'button', etc.
-    return child.type;
-  } else if (typeof child.type === "function") {
-    // React component - get its name
-    const func = child.type as any;
-    return func.displayName || func.name || "Component";
-  }
-  return "Unknown";
-}
-
 function LivePreviewBridge({
   editorId,
   children,
@@ -218,21 +191,19 @@ function LivePreviewBridge({
   };
 
   const finalChildren = newChildren ?? childProps.children;
-  const componentName = getComponentName(child);
-  const processedProps = propsProcessor(componentName, props);
 
   // Update global and return
   updateGlobalOverrides(editorId, {
-    ...processedProps,
+    ...props,
     children: finalChildren,
   });
   debug &&
     console.log("[LivePreviewBridge] Applied:", {
       editorId,
-      props: processedProps,
+      props: props,
     });
 
-  return React.cloneElement(child, processedProps, finalChildren);
+  return React.cloneElement(child, props, finalChildren);
 }
 
 export default LivePreviewBridge;

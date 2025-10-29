@@ -19,6 +19,11 @@ export interface ElementUpdate {
   overrides: ElementOverrides | null;
 }
 
+export type ElementProps = Record<string, unknown> & {
+  style?: React.CSSProperties | string;
+  children?: React.ReactNode;
+};
+
 export interface BridgeMessage {
   type: string;
   updates: ElementUpdate[];
@@ -28,6 +33,8 @@ export interface BridgeWrapperProps {
   editorId: string;
   children: React.ReactNode;
   debug?: boolean;
+  messageType?: string;
+  componentName?: string;
 }
 
 declare global {
@@ -36,197 +43,180 @@ declare global {
   }
 }
 
+function propsProcessor(
+  name: string,
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  if (name === "ImageOptimizer") {
+    return { originalProps: props };
+  } else {
+    return props;
+  }
+}
+
+// Global state helpers
+function ensureGlobalOverrides(): void {
+  if (typeof window !== "undefined") {
+    window.__elementOverrides = window.__elementOverrides || {};
+  }
+}
+
+function getStoredOverrides(editorId: string): ElementOverrides {
+  ensureGlobalOverrides();
+  return window.__elementOverrides?.[editorId] || {};
+}
+
+function updateGlobalOverrides(
+  editorId: string,
+  overrides: ElementOverrides | null,
+): void {
+  ensureGlobalOverrides();
+  if (!window.__elementOverrides) return;
+
+  if (overrides === null || Object.keys(overrides).length === 0) {
+    delete window.__elementOverrides[editorId];
+  } else {
+    window.__elementOverrides[editorId] = overrides;
+  }
+}
+
+// Style merging utility
+function mergeStyles(
+  original: React.CSSProperties | string | undefined,
+  override: React.CSSProperties | string,
+): React.CSSProperties | string {
+  if (typeof override !== "object" || typeof original !== "object") {
+    return override;
+  }
+  return { ...(original || {}), ...override };
+}
+
 // Merge multiple overrides, with later overrides taking precedence
-function mergeOverrides(overridesList: (ElementOverrides | null)[]): ElementOverrides | null {
-  if (overridesList.some(override => override === null)) {
-    return null;
-  }
-  
-  const validOverrides = overridesList.filter((override): override is ElementOverrides => override !== null);
-  
-  if (validOverrides.length === 0) {
-    return null;
-  }
-  
-  if (validOverrides.length === 1) {
-    return validOverrides[0];
-  }
-  
+function mergeOverrides(
+  overridesList: (ElementOverrides | null)[],
+): ElementOverrides | null {
+  const validOverrides = overridesList.filter(
+    (override): override is ElementOverrides => override !== null,
+  );
+
+  if (validOverrides.length === 0) return null;
+  if (validOverrides.length === 1) return validOverrides[0];
+
   let merged: ElementOverrides = {};
-  
+
   for (const override of validOverrides) {
     merged = { ...merged, ...override };
-    
+
     if (override.style && merged.style) {
-      if (typeof override.style === 'object' && typeof merged.style === 'object') {
-        merged.style = { ...merged.style, ...override.style };
-      } else {
-        merged.style = override.style;
-      }
+      merged.style =
+        typeof override.style === "object" && typeof merged.style === "object"
+          ? { ...merged.style, ...override.style }
+          : override.style;
     }
-    
+
     if (override.attributes && merged.attributes) {
       merged.attributes = { ...merged.attributes, ...override.attributes };
     }
   }
-  
+
   return merged;
 }
+
+// Get element file path from DOM
+function getElementFilePath(editorId: string): string | null {
+  if (typeof document === "undefined") return null;
+
+  const element = document.querySelector(`[data-editor-id="${editorId}"]`);
+  if (!element) return null;
+
+  return (
+    element.getAttribute("data-component-file") ||
+    element.getAttribute("data-rendered-by") ||
+    null
+  );
+}
+
 
 export function BridgeWrapper({
   editorId,
   children,
   debug,
+  messageType = "ELEMENT_UPDATE",
+  componentName = "Unknown",
 }: BridgeWrapperProps) {
-  const ensureGlobal = (): void => {
-    if (typeof window === "undefined") return;
-    window.__elementOverrides = window.__elementOverrides || {};
-  };
-
-  ensureGlobal();
-
-  const [overrides, setOverrides] = React.useState<ElementOverrides>(() => {
-    ensureGlobal();
-    const stored = window.__elementOverrides?.[editorId] || {};
-    return stored;
-  });
+  const [overrides, setOverrides] = React.useState<ElementOverrides>(() =>
+    getStoredOverrides(editorId),
+  );
 
   React.useEffect(() => {
-    const getElementFilePath = (): string | null => {
-      if (typeof document === "undefined") return null;
-      
-      const element = document.querySelector(`[data-editor-id="${editorId}"]`);
-      if (!element) return null;
-      
-      return element.getAttribute('data-component-file') || 
-             element.getAttribute('data-rendered-by') || 
-             null;
-    };
-
     const handleMessage = (event: MessageEvent<BridgeMessage>) => {
-      const data = event.data;
-      
-      if (data?.type !== "ELEMENT_UPDATE") {
-        return;
-      }
-      
-      const elementFilePath = getElementFilePath();
-      
-      if (!elementFilePath) {
-        return;
-      }
-      
-      const relevantUpdates = data.updates.filter(update => 
-        update.editorId === editorId && update.filePath === elementFilePath
+      if (event.data?.type !== messageType) return;
+
+      const elementFilePath = getElementFilePath(editorId);
+      if (!elementFilePath) return;
+
+      const relevantUpdates = event.data.updates.filter(
+        (update) =>
+          update.editorId === editorId && update.filePath === elementFilePath,
       );
-      
-      const newOverrides = relevantUpdates.length === 0 
-        ? null 
-        : mergeOverrides(relevantUpdates.map(u => u.overrides));
-      
-      if (debug) {
-        console.log("[BridgeWrapper]", "Element update received:", { 
-          editorId, 
-          filePath: elementFilePath, 
-          mergedOverrides: newOverrides,
-          totalUpdates: data.updates.length,
-          relevantUpdates: relevantUpdates.length,
-          mergedFrom: relevantUpdates.length > 1 ? `${relevantUpdates.length} updates` : "1 update"
+
+      const newOverrides = mergeOverrides(
+        relevantUpdates.map((u) => u.overrides),
+      );
+
+      debug &&
+        console.log("[BridgeWrapper]", {
+          editorId,
+          newOverrides,
+          count: relevantUpdates.length,
         });
-      }
-      
-      if (newOverrides === null) {
-        setOverrides({});
-        if (window.__elementOverrides) {
-          delete window.__elementOverrides[editorId];
-        }
-        if (debug) {
-          console.log("[BridgeWrapper]", "Reset to original:", { editorId });
-        }
-      } else {
-        setOverrides(newOverrides || {});
-      }
+
+      setOverrides(newOverrides || {});
+      updateGlobalOverrides(editorId, newOverrides);
     };
 
     if (typeof window !== "undefined") {
       window.addEventListener("message", handleMessage);
       return () => window.removeEventListener("message", handleMessage);
     }
-  }, [editorId, debug]);
+  }, [editorId, debug, messageType]);
 
-  const count = React.Children.count(children);
-  if (count !== 1) return <>{children}</>;
+  // Validate single child
+  if (React.Children.count(children) !== 1) return <>{children}</>;
+  const child = React.Children.only(children);
+  if (!React.isValidElement(child)) return <>{child}</>;
 
-  const onlyChild = React.Children.only(children);
-  if (!React.isValidElement(onlyChild)) return <>{onlyChild}</>;
-
+  // No overrides - return original
   if (!overrides || Object.keys(overrides).length === 0) {
-    ensureGlobal();
-    if (window.__elementOverrides) {
-      delete window.__elementOverrides[editorId];
-    }
+    updateGlobalOverrides(editorId, null);
     return children;
   }
 
-  type ElementProps = Record<string, unknown> & {
-    style?: React.CSSProperties | string;
-    children?: React.ReactNode;
+  // Build final props
+  const { children: newChildren, attributes, ...direct } = overrides;
+  const childProps = child.props as ElementProps;
+  const props = {
+    ...childProps,
+    ...(attributes ?? {}),
+    ...direct,
+    style: direct.style
+      ? mergeStyles(childProps.style, direct.style)
+      : childProps.style,
   };
 
-  const originalProps = onlyChild.props as ElementProps;
-  const {
-    children: overrideChildren,
-    attributes,
-    ...directOverrides
-  } = overrides;
-  const attributeOverrides = { ...(attributes ?? {}), ...directOverrides };
+  const finalChildren = newChildren ?? childProps.children;
+  const processedProps = propsProcessor(componentName, props);
 
-  const mergeStyles = (
-    original: React.CSSProperties | string | undefined,
-    override: React.CSSProperties | string,
-  ): React.CSSProperties | string => {
-    if (typeof override !== "object" || typeof original !== "object")
-      return override;
-    return { ...(original || {}), ...override };
-  };
-
-  const mergedStyle =
-    attributeOverrides.style !== undefined
-      ? mergeStyles(originalProps.style, attributeOverrides.style)
-      : originalProps.style;
-
-  if (debug && attributeOverrides.style !== undefined) {
-    console.log("[BridgeWrapper]", "Style merge:", {
+  // Update global and return
+  updateGlobalOverrides(editorId, {
+    ...processedProps,
+    children: finalChildren,
+  });
+  debug &&
+    console.log("[BridgeWrapper] Applied:", {
       editorId,
-      original: originalProps.style,
-      override: attributeOverrides.style,
-      merged: mergedStyle,
+      props: processedProps,
     });
-  }
 
-  const mergedProps = {
-    ...originalProps,
-    ...attributeOverrides,
-    ...(mergedStyle !== undefined && { style: mergedStyle }),
-  };
-
-  const finalChildren = overrideChildren ?? originalProps.children ?? null;
-
-  ensureGlobal();
-  if (window.__elementOverrides) {
-    window.__elementOverrides[editorId] = {
-      ...mergedProps,
-      children: finalChildren,
-    };
-    if (debug) {
-      console.log("[BridgeWrapper]", "Global snapshot:", {
-        editorId,
-        mergedProps,
-        finalChildren,
-        snapshot: window.__elementOverrides[editorId],
-      });
-    }
-  }
-
-  return React.cloneElement(onlyChild, mergedProps, finalChildren);
+  return React.cloneElement(child, processedProps, finalChildren);
 }

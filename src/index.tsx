@@ -2,7 +2,6 @@ import type { ConfigAPI } from "@babel/core";
 import crypto from "node:crypto";
 import type { NodePath } from "@babel/traverse";
 import { type PluginObj, types as t } from "@babel/core";
-import { parse } from "@babel/parser";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -513,13 +512,14 @@ namespace AttachBridge {
   export type BridgeOptions = {
     filename?: string;
     skipFiles?: string[];
-    messageType?: string;
     debugger?: boolean;
+    messageType?: string;
+    componentPath?: string; // Optional - path to user's BridgeWrapper
   };
 
   export function attachBridge(
     _api: ConfigAPI,
-    options: BridgeOptions = {},
+    options: BridgeOptions,
   ): PluginObj {
     const filename = options.filename || "";
     const skipFiles = options.skipFiles || [];
@@ -539,9 +539,8 @@ namespace AttachBridge {
       name: "babel-plugin-jsx-bridge",
       visitor: {
         Program(path) {
-          // Always add BridgeWrapper to all files
-          if (!hasExistingBridgeWrapper(path)) {
-            addBridgeWrapperCode(path, options);
+          if (options.componentPath && !hasExistingBridgeWrapperImport(path)) {
+            addBridgeWrapperImport(path, options.componentPath);
           }
         },
         JSXElement(path: NodePath<JSXElement>) {
@@ -585,6 +584,35 @@ namespace AttachBridge {
     );
   }
 
+  function findComponentName(path: NodePath<JSXElement>): string {
+    // Traverse up the AST to find the containing function/component
+    let currentPath: NodePath | null = path;
+    
+    while (currentPath) {
+      if (currentPath.isFunctionDeclaration()) {
+        if (currentPath.node.id && t.isIdentifier(currentPath.node.id)) {
+          return currentPath.node.id.name;
+        }
+      }
+      
+      if (currentPath.isVariableDeclarator()) {
+        if (currentPath.node.id && t.isIdentifier(currentPath.node.id)) {
+          // Check if this is a function expression or arrow function
+          if (
+            t.isArrowFunctionExpression(currentPath.node.init) ||
+            t.isFunctionExpression(currentPath.node.init)
+          ) {
+            return currentPath.node.id.name;
+          }
+        }
+      }
+      
+      currentPath = currentPath.parentPath;
+    }
+    
+    return "Unknown";
+  }
+
   function wrapWithBridge(
     path: NodePath<JSXElement>,
     options: BridgeOptions,
@@ -602,17 +630,14 @@ namespace AttachBridge {
 
     const editorId = editorIdAttr.value.value;
     const debug = !!options.debugger;
-
+    const messageType = options.messageType || "ELEMENT_UPDATE";
+    const componentName = findComponentName(path);
     const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
 
     const attributes = [
       t.jsxAttribute(t.jsxIdentifier("editorId"), t.stringLiteral(editorId)),
-      t.jsxAttribute(
-        t.jsxIdentifier("originalElement"),
-        t.jsxExpressionContainer(
-          t.stringLiteral(getBridgeElementTagName(original)),
-        ),
-      ),
+      t.jsxAttribute(t.jsxIdentifier("messageType"), t.stringLiteral(messageType)),
+      t.jsxAttribute(t.jsxIdentifier("componentName"), t.stringLiteral(componentName)),
     ];
 
     if (debug) {
@@ -633,44 +658,40 @@ namespace AttachBridge {
     path.replaceWith(bridgeElement);
   }
 
-  function getBridgeElementTagName(jsxElement: JSXElement): string {
-    if (t.isJSXIdentifier(jsxElement.openingElement.name)) {
-      return jsxElement.openingElement.name.name;
-    }
-    return "div";
-  }
-
-  function hasExistingBridgeWrapper(programPath: NodePath<t.Program>): boolean {
-    const body = programPath.node.body;
-    return body.some(
-      (node: t.Statement) =>
-        t.isFunctionDeclaration(node) &&
-        t.isIdentifier(node.id) &&
-        node.id.name === "BridgeWrapper",
-    );
-  }
-
-  function hasExistingReactImport(programPath: NodePath<t.Program>): boolean {
+  function hasExistingBridgeWrapperImport(
+    programPath: NodePath<t.Program>,
+  ): boolean {
     const body = programPath.node.body;
     return body.some(
       (node: t.Statement) =>
         t.isImportDeclaration(node) &&
-        t.isStringLiteral(node.source) &&
-        node.source.value === "react",
+        node.specifiers.some(
+          (spec) =>
+            t.isImportDefaultSpecifier(spec) &&
+            spec.local.name === "BridgeWrapper",
+        ),
     );
   }
 
-  function getBridgeWrapperCode(
-    needsReactImport: boolean,
-    messageType: string,
-  ): string {
+  function addBridgeWrapperImport(
+    programPath: NodePath<t.Program>,
+    componentPath: string,
+  ) {
+    const importDeclaration = t.importDeclaration(
+      [t.importDefaultSpecifier(t.identifier("BridgeWrapper"))],
+      t.stringLiteral(componentPath),
+    );
+
+    programPath.unshiftContainer("body", importDeclaration);
+  }
+
+  export function generateBridgeWrapperFile(): string {
     try {
-      // Read the compiled BridgeWrapper from dist
       const currentDir =
         typeof __dirname !== "undefined"
           ? __dirname
           : dirname(fileURLToPath(import.meta.url));
-      const compiledPath = join(currentDir, "../dist/BridgeWrapper.js");
+      const compiledPath = join(currentDir, "BridgeWrapper.js");
       let bridgeWrapperCode = readFileSync(compiledPath, "utf8");
 
       // Remove imports/exports and JSX runtime imports
@@ -680,12 +701,6 @@ namespace AttachBridge {
         .replace(/export\s+/g, "")
         .replace(/\/\/# sourceMappingURL=.*$/m, "")
         .trim();
-
-      // Replace message type
-      bridgeWrapperCode = bridgeWrapperCode.replace(
-        /"ELEMENT_UPDATE"/g,
-        `"${messageType}"`,
-      );
 
       // Convert JSX runtime calls back to JSX for consistency
       bridgeWrapperCode = bridgeWrapperCode
@@ -698,37 +713,15 @@ namespace AttachBridge {
           "<>{onlyChild}</>",
         );
 
-      return `${needsReactImport ? 'import React from "react";' : ""}
+      return `import React from "react";
 
-${bridgeWrapperCode}`;
+${bridgeWrapperCode}
+
+export { BridgeWrapper };
+export default BridgeWrapper;`;
     } catch (error) {
       console.error("Failed to read compiled BridgeWrapper:", error);
       throw new Error("Could not load BridgeWrapper source");
-    }
-  }
-
-  function addBridgeWrapperCode(
-    programPath: NodePath<t.Program>,
-    options: BridgeOptions,
-  ) {
-    const needsReactImport = !hasExistingReactImport(programPath);
-    const messageType = options.messageType || "ELEMENT_UPDATE";
-
-    const bridgeWrapperCode = getBridgeWrapperCode(
-      needsReactImport,
-      messageType,
-    );
-
-    const ast = parse(bridgeWrapperCode, {
-      sourceType: "module",
-      plugins: ["jsx", "typescript"],
-    });
-
-    if (ast?.program?.body && Array.isArray(ast.program.body)) {
-      // Add nodes in reverse order since unshiftContainer adds to the beginning
-      for (let i = ast.program.body.length - 1; i >= 0; i--) {
-        programPath.unshiftContainer("body", ast.program.body[i]);
-      }
     }
   }
 }
@@ -736,5 +729,6 @@ ${bridgeWrapperCode}`;
 export type { ElementOverrides, BridgeMessage } from "./BridgeWrapper";
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;
+export const generateBridgeWrapperFile = AttachBridge.generateBridgeWrapperFile;
 export type MetadataOptions = AttachMetadata.MetadataOptions;
 export type BridgeOptions = AttachBridge.BridgeOptions;

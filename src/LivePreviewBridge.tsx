@@ -47,7 +47,10 @@ function propsProcessor(
   props: Record<string, unknown>,
 ): Record<string, unknown> {
   if (name === "ImageOptimizer") {
-    return { originalProps: props };
+    return {
+      ...props,
+      originalProps: { ...(props?.originalProps || {}), props },
+    };
   } else {
     return props;
   }

@@ -2,15 +2,11 @@ import React from "react";
 
 export interface ElementOverrides {
   children?: React.ReactNode | string;
-  attributes?: Record<string, string | number | boolean>;
   className?: string;
   style?: React.CSSProperties | string;
   src?: string;
   href?: string;
   alt?: string;
-  title?: string;
-  id?: string;
-  filePath?: string;
 }
 
 export interface ElementUpdate {
@@ -101,10 +97,6 @@ function mergeOverrides(
           ? { ...merged.style, ...override.style }
           : override.style;
     }
-
-    if (override.attributes && merged.attributes) {
-      merged.attributes = { ...merged.attributes, ...override.attributes };
-    }
   }
 
   return merged;
@@ -179,11 +171,10 @@ function LivePreviewBridge({
   }
 
   // Build final props
-  const { children: newChildren, attributes, ...direct } = overrides;
+  const { children: newChildren, ...direct } = overrides;
   const childProps = child.props as ElementProps;
   const props = {
     ...childProps,
-    ...(attributes ?? {}),
     ...direct,
     style: direct.style
       ? mergeStyles(childProps.style, direct.style)

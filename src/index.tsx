@@ -112,23 +112,15 @@ namespace AttachMetadata {
     name: string,
     value: string,
   ): void {
-    const existingAttrIndex = openingElement.attributes.findIndex(
-      (attr): attr is JSXAttribute =>
-        t.isJSXAttribute(attr) &&
-        t.isJSXIdentifier(attr.name) &&
-        attr.name.name === name,
-    );
-
-    const newAttribute = t.jsxAttribute(
-      t.jsxIdentifier(name),
-      t.stringLiteral(value),
-    );
-
-    if (existingAttrIndex !== -1) {
-      openingElement.attributes[existingAttrIndex] = newAttribute;
-    } else {
-      openingElement.attributes.push(newAttribute);
+    const attrs = openingElement.attributes;
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+      if (t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name) && attr.name.name === name) {
+        attrs[i] = t.jsxAttribute(t.jsxIdentifier(name), t.stringLiteral(value));
+        return;
+      }
     }
+    attrs.push(t.jsxAttribute(t.jsxIdentifier(name), t.stringLiteral(value)));
   }
 
   function addComponentAttributes(
@@ -555,62 +547,62 @@ namespace AttachBridge {
         },
         JSXElement(path: NodePath<JSXElement>) {
           const jsxElement = path.node;
-
-          if (
-            isHTMLElement(jsxElement) &&
-            hasDataEditorId(jsxElement) &&
-            !isAlreadyWrapped(path)
-          ) {
-            wrapWithBridge(path, options);
+          const bridgeInfo = processJSXElementForBridge(jsxElement, path);
+          
+          if (bridgeInfo.shouldWrap) {
+            wrapWithBridge(path, options, bridgeInfo.editorId);
           }
         },
       },
     };
   }
 
-  function isHTMLElement(jsxElement: JSXElement): boolean {
-    if (t.isJSXIdentifier(jsxElement.openingElement.name)) {
-      const tagName = jsxElement.openingElement.name.name;
-      return /^[a-z]/.test(tagName);
+  function processJSXElementForBridge(jsxElement: JSXElement, path: NodePath<JSXElement>): { 
+    shouldWrap: boolean; 
+    editorId: string | null; 
+  } {
+    if (!t.isJSXIdentifier(jsxElement.openingElement.name)) {
+      return { shouldWrap: false, editorId: null };
     }
-    return false;
-  }
-
-  function hasDataEditorId(jsxElement: JSXElement): boolean {
-    return jsxElement.openingElement.attributes.some(
-      (attr): attr is JSXAttribute =>
-        t.isJSXAttribute(attr) &&
-        t.isJSXIdentifier(attr.name) &&
-        attr.name.name === "data-editor-id",
-    );
-  }
-
-  function isAlreadyWrapped(path: NodePath<JSXElement>): boolean {
+    
+    const tagName = jsxElement.openingElement.name.name;
+    const firstChar = tagName.charCodeAt(0);
+    const isHTML = firstChar >= 97 && firstChar <= 122;
+    
+    if (!isHTML) {
+      return { shouldWrap: false, editorId: null };
+    }
+    
     const parent = path.parentPath;
-    return !!(
+    const isAlreadyWrapped = !!(
       parent?.isJSXElement() &&
       t.isJSXIdentifier(parent.node.openingElement.name) &&
       parent.node.openingElement.name.name === "LivePreviewBridge"
     );
+    
+    if (isAlreadyWrapped) {
+      return { shouldWrap: false, editorId: null };
+    }
+    
+    const editorIdAttr = jsxElement.openingElement.attributes.find(
+      (attr): attr is JSXAttribute =>
+        t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name) && attr.name.name === "data-editor-id"
+    );
+    
+    const editorId = editorIdAttr && t.isStringLiteral(editorIdAttr.value) ? editorIdAttr.value.value : null;
+    
+    return { shouldWrap: !!editorId, editorId };
   }
 
 
   function wrapWithBridge(
     path: NodePath<JSXElement>,
     options: BridgeOptions,
+    editorId: string | null,
   ): void {
+    if (!editorId) return;
+    
     const original = path.node;
-
-    const editorIdAttr = original.openingElement.attributes.find(
-      (attr): attr is JSXAttribute =>
-        t.isJSXAttribute(attr) &&
-        t.isJSXIdentifier(attr.name) &&
-        attr.name.name === "data-editor-id",
-    );
-
-    if (!editorIdAttr || !t.isStringLiteral(editorIdAttr.value)) return;
-
-    const editorId = editorIdAttr.value.value;
     const debug = !!options.debugger;
     const messageType = options.messageType || "ELEMENT_UPDATE";
     const cloned = t.cloneNode(original, /* deep */ true) as JSXElement;
@@ -698,22 +690,20 @@ namespace DetachMetadata {
       visitor: {
         JSXOpeningElement(path) {
           const openingElement = path.node;
+          const attrs = openingElement.attributes;
           
-          openingElement.attributes = openingElement.attributes.filter(
-            (attr) => {
-              if (!t.isJSXAttribute(attr) || !t.isJSXIdentifier(attr.name)) {
-                return true;
-              }
-              
+          for (let i = attrs.length - 1; i >= 0; i--) {
+            const attr = attrs[i];
+            if (t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name)) {
               const attrName = attr.name.name;
-              return ![
-                "data-editor-id",
-                "data-component-file", 
-                "data-component-name",
-                "data-rendered-by"
-              ].includes(attrName);
+              if (attrName === "data-editor-id" || 
+                  attrName === "data-component-file" || 
+                  attrName === "data-component-name" || 
+                  attrName === "data-rendered-by") {
+                attrs.splice(i, 1);
+              }
             }
-          );
+          }
         },
       },
     };

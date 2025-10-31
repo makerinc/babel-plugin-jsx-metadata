@@ -43,6 +43,15 @@ namespace AttachMetadata {
     return "unknown";
   }
 
+  function isValidMD5Id(id: string): boolean {
+    if (id.length !== 12) return false;
+    for (let i = 0; i < 12; i++) {
+      const c = id.charCodeAt(i);
+      if (!((c >= 48 && c <= 57) || (c >= 97 && c <= 102))) return false;
+    }
+    return true;
+  }
+
   function assignElementId(
     openingElement: JSXOpeningElement,
     context: IdGenerationContext,
@@ -62,6 +71,7 @@ namespace AttachMetadata {
       if (
         existingId &&
         existingId.trim() !== "" &&
+        isValidMD5Id(existingId) &&
         !context.usedIds.has(existingId)
       ) {
         finalId = existingId;
@@ -659,11 +669,64 @@ namespace AttachBridge {
   }
 }
 
+namespace DetachMetadata {
+  export type DetachOptions = {
+    filename?: string;
+    skipFiles?: string[];
+  };
+
+  export function detachMetadata(
+    _api: ConfigAPI,
+    options: DetachOptions = {},
+  ): PluginObj {
+    const filename = options.filename || "";
+    const skipFiles = options.skipFiles || [];
+
+    if (
+      skipFiles.some(
+        (skipFile) => filename === skipFile || filename.includes(skipFile),
+      )
+    ) {
+      return {
+        name: "babel-plugin-jsx-detach-metadata",
+        visitor: {},
+      };
+    }
+
+    return {
+      name: "babel-plugin-jsx-detach-metadata",
+      visitor: {
+        JSXOpeningElement(path) {
+          const openingElement = path.node;
+          
+          openingElement.attributes = openingElement.attributes.filter(
+            (attr) => {
+              if (!t.isJSXAttribute(attr) || !t.isJSXIdentifier(attr.name)) {
+                return true;
+              }
+              
+              const attrName = attr.name.name;
+              return ![
+                "data-editor-id",
+                "data-component-file", 
+                "data-component-name",
+                "data-rendered-by"
+              ].includes(attrName);
+            }
+          );
+        },
+      },
+    };
+  }
+}
+
 export type { ElementOverrides, BridgeMessage } from "./LivePreviewBridge";
 export const attachMetadata = AttachMetadata.attachMetadata;
 export const attachBridge = AttachBridge.attachBridge;
+export const detachMetadata = DetachMetadata.detachMetadata;
 export type MetadataOptions = AttachMetadata.MetadataOptions;
 export type BridgeOptions = AttachBridge.BridgeOptions;
+export type DetachOptions = DetachMetadata.DetachOptions;
 
 // Auto-generated source code of LivePreviewBridge component
 export const LivePreviewBridgeSource = "";

@@ -7,7 +7,6 @@ import type {
   FunctionExpression,
   CallExpression,
   JSXAttribute,
-  JSXAttributeValue,
   JSXElement,
   JSXExpressionContainer,
   JSXFragment,
@@ -18,6 +17,7 @@ import type {
   ReturnStatement,
   Expression,
   PrivateName,
+  TSParameterProperty,
 } from "@babel/types";
 
 namespace AttachMetadata {
@@ -121,6 +121,8 @@ namespace AttachMetadata {
     | t.StringLiteral
     | t.JSXExpressionContainer;
 
+  type NormalizedAttributeValue = t.JSXAttribute["value"];
+
   function generateNewId(context: IdGenerationContext): string {
     let newId: string;
 
@@ -151,7 +153,11 @@ namespace AttachMetadata {
     const attrs = openingElement.attributes;
     for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
-      if (t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name) && attr.name.name === name) {
+      if (
+        t.isJSXAttribute(attr) &&
+        t.isJSXIdentifier(attr.name) &&
+        attr.name.name === name
+      ) {
         attrs[i] = t.jsxAttribute(t.jsxIdentifier(name), normalizedValue);
         return;
       }
@@ -159,7 +165,9 @@ namespace AttachMetadata {
     attrs.push(t.jsxAttribute(t.jsxIdentifier(name), normalizedValue));
   }
 
-  function normalizeAttributeValue(value: AttributeValue): JSXAttributeValue {
+  function normalizeAttributeValue(
+    value: AttributeValue,
+  ): NormalizedAttributeValue {
     if (typeof value === "string") {
       return t.stringLiteral(value);
     }
@@ -275,7 +283,8 @@ namespace AttachMetadata {
       const initPath = path.get("init");
       if (
         initPath &&
-        (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression())
+        (initPath.isFunctionExpression() ||
+          initPath.isArrowFunctionExpression())
       ) {
         functionLikePath = initPath;
       }
@@ -421,7 +430,7 @@ namespace AttachMetadata {
     if (callbackArgPath.node.params.length > 0) {
       const firstParam = callbackArgPath.node.params[0];
       if (firstParam) {
-        collectNamesFromPattern(firstParam, itemParamNames);
+        collectNamesFromFunctionParameter(firstParam, itemParamNames);
       }
     }
 
@@ -471,7 +480,9 @@ namespace AttachMetadata {
     if (!binding.path.isVariableDeclarator()) return null;
 
     const initPath = binding.path.get("init");
-    const initNode = initPath?.node ? unwrapStaticInitializer(initPath.node) : null;
+    const initNode = initPath?.node
+      ? unwrapStaticInitializer(initPath.node)
+      : null;
 
     if (!initNode || !isStaticCollectionExpression(initNode)) {
       return null;
@@ -492,7 +503,9 @@ namespace AttachMetadata {
     return node;
   }
 
-  function isStaticCollectionExpression(node: t.Node | null): node is t.ArrayExpression {
+  function isStaticCollectionExpression(
+    node: t.Node | null,
+  ): node is t.ArrayExpression {
     if (!node) return false;
     const resolved = unwrapStaticInitializer(node);
     return t.isArrayExpression(resolved);
@@ -521,37 +534,70 @@ namespace AttachMetadata {
     }
 
     if (bodyPath.isBlockStatement()) {
-      bodyPath.traverse(
-        {
-          ReturnStatement(returnPath) {
-            const argumentPath = returnPath.get("argument");
-            if (!argumentPath) return;
+      bodyPath.traverse({
+        ReturnStatement(returnPath) {
+          const argumentPath = returnPath.get("argument");
+          if (!argumentPath) return;
 
-            if (argumentPath.isJSXElement()) {
-              elements.push(argumentPath as NodePath<JSXElement>);
-            } else if (argumentPath.isJSXFragment()) {
-              const fragmentChildren = argumentPath.get("children");
-              fragmentChildren.forEach((fragmentChild) => {
-                if (Array.isArray(fragmentChild)) return;
-                if (fragmentChild.isJSXElement()) {
-                  elements.push(fragmentChild);
-                }
-              });
-            }
-          },
-          Function(innerFnPath) {
-            innerFnPath.skip();
-          },
-          ArrowFunctionExpression(innerArrowPath) {
-            innerArrowPath.skip();
-          },
+          if (argumentPath.isJSXElement()) {
+            elements.push(argumentPath as NodePath<JSXElement>);
+          } else if (argumentPath.isJSXFragment()) {
+            const fragmentChildren = argumentPath.get("children");
+            fragmentChildren.forEach((fragmentChild) => {
+              if (Array.isArray(fragmentChild)) return;
+              if (fragmentChild.isJSXElement()) {
+                elements.push(fragmentChild);
+              }
+            });
+          }
         },
-        undefined,
-        {},
-      );
+        Function(innerFnPath) {
+          innerFnPath.skip();
+        },
+        ArrowFunctionExpression(innerArrowPath) {
+          innerArrowPath.skip();
+        },
+      });
     }
 
     return elements;
+  }
+
+  function collectNamesFromFunctionParameter(
+    param: t.FunctionParameter,
+    names: Set<string>,
+  ): void {
+    if (t.isTSParameterProperty(param)) {
+      const tsParam = param as TSParameterProperty;
+      collectNamesFromFunctionParameter(tsParam.parameter, names);
+      return;
+    }
+
+    if (t.isIdentifier(param)) {
+      collectNamesFromPattern(param, names);
+      return;
+    }
+
+    if (t.isObjectPattern(param) || t.isArrayPattern(param)) {
+      collectNamesFromPattern(param, names);
+      return;
+    }
+
+    if (t.isAssignmentPattern(param)) {
+      collectNamesFromPattern(param.left, names);
+      return;
+    }
+
+    if (t.isRestElement(param)) {
+      const argument = param.argument;
+      if (
+        t.isIdentifier(argument) ||
+        t.isArrayPattern(argument) ||
+        t.isObjectPattern(argument)
+      ) {
+        collectNamesFromPattern(argument as LVal, names);
+      }
+    }
   }
 
   function collectNamesFromPattern(param: LVal, names: Set<string>): void {
@@ -628,7 +674,9 @@ namespace AttachMetadata {
     const openingElement = elementPath.node.openingElement;
     const keyExpression = getKeyExpression(elementPath);
 
-    const idExpressionBase = keyExpression ?? (indexExpression ? t.cloneNode(indexExpression, true) : null);
+    const idExpressionBase =
+      keyExpression ??
+      (indexExpression ? t.cloneNode(indexExpression, true) : null);
     const sourceExpressionBase =
       (indexExpression ? t.cloneNode(indexExpression, true) : null) ??
       (keyExpression ? t.cloneNode(keyExpression, true) : null);
@@ -644,8 +692,12 @@ namespace AttachMetadata {
     processJSXChildren(elementPath.node, filename, false, context);
 
     const loopContext: LoopContext = {
-      idExpression: idExpressionBase ? t.cloneNode(idExpressionBase, true) : null,
-      sourceExpression: sourceExpressionBase ? t.cloneNode(sourceExpressionBase, true) : null,
+      idExpression: idExpressionBase
+        ? t.cloneNode(idExpressionBase, true)
+        : null,
+      sourceExpression: sourceExpressionBase
+        ? t.cloneNode(sourceExpressionBase, true)
+        : null,
       itemParamNames,
       collectionSourceName: collectionInfo.sourceName,
     };
@@ -675,7 +727,7 @@ namespace AttachMetadata {
 
       if (valuePath.isJSXExpressionContainer()) {
         const expressionPath = valuePath.get("expression");
-        if (expressionPath && expressionPath.node && t.isExpression(expressionPath.node)) {
+        if (expressionPath?.node && t.isExpression(expressionPath.node)) {
           return t.cloneNode(expressionPath.node, true);
         }
       }
@@ -719,7 +771,9 @@ namespace AttachMetadata {
     return found;
   }
 
-  function cloneLoopExpression(expression: Expression | null): Expression | null {
+  function cloneLoopExpression(
+    expression: Expression | null,
+  ): Expression | null {
     return expression ? t.cloneNode(expression, true) : null;
   }
 
@@ -730,7 +784,10 @@ namespace AttachMetadata {
     loopContext: LoopContext,
   ): void {
     const annotateElement = (currentPath: NodePath<JSXElement>): void => {
-      if (processedLoopElements.has(currentPath.node) && currentPath.node !== elementPath.node) {
+      if (
+        processedLoopElements.has(currentPath.node) &&
+        currentPath.node !== elementPath.node
+      ) {
         return;
       }
 
@@ -741,9 +798,14 @@ namespace AttachMetadata {
         !isComponent &&
         elementReferencesParamNames(currentPath, loopContext.itemParamNames)
       ) {
-        addRenderedByAttributes(currentPath.node.openingElement, filename, context, {
-          dynamicSuffix: cloneLoopExpression(loopContext.idExpression),
-        });
+        addRenderedByAttributes(
+          currentPath.node.openingElement,
+          filename,
+          context,
+          {
+            dynamicSuffix: cloneLoopExpression(loopContext.idExpression),
+          },
+        );
       }
 
       annotateDynamicChildrenForElement(currentPath, filename, loopContext);
@@ -752,15 +814,11 @@ namespace AttachMetadata {
 
     annotateElement(elementPath);
 
-    elementPath.traverse(
-      {
-        JSXElement(innerPath) {
-          annotateElement(innerPath);
-        },
+    elementPath.traverse({
+      JSXElement(innerPath) {
+        annotateElement(innerPath);
       },
-      undefined,
-      {},
-    );
+    });
   }
 
   function annotateDynamicChildrenForElement(
@@ -818,7 +876,12 @@ namespace AttachMetadata {
       if (!valuePath || !valuePath.isJSXExpressionContainer()) continue;
 
       const expressionPath = valuePath.get("expression");
-      if (!expressionPath || !expressionPath.node || !t.isExpression(expressionPath.node)) continue;
+      if (
+        !expressionPath ||
+        !expressionPath.node ||
+        !t.isExpression(expressionPath.node)
+      )
+        continue;
 
       if (
         !expressionReferencesNames(
@@ -893,7 +956,11 @@ namespace AttachMetadata {
       if (!childPath.isJSXExpressionContainer()) continue;
 
       const expressionPath = childPath.get("expression");
-      if (!expressionPath || !expressionPath.node || !t.isExpression(expressionPath.node)) {
+      if (
+        !expressionPath ||
+        !expressionPath.node ||
+        !t.isExpression(expressionPath.node)
+      ) {
         continue;
       }
 
@@ -956,7 +1023,10 @@ namespace AttachMetadata {
       );
       if (objectPath === null) return null;
 
-      const propertySegment = getPropertySegment(expression.property, expression.computed);
+      const propertySegment = getPropertySegment(
+        expression.property,
+        expression.computed,
+      );
       if (propertySegment === null) return null;
       return `${objectPath}${propertySegment}`;
     }
@@ -969,7 +1039,10 @@ namespace AttachMetadata {
       );
       if (objectPath === null) return null;
 
-      const propertySegment = getPropertySegment(expression.property, expression.computed);
+      const propertySegment = getPropertySegment(
+        expression.property,
+        expression.computed,
+      );
       if (propertySegment === null) return null;
 
       return `${objectPath}${propertySegment}`;
@@ -1035,7 +1108,10 @@ namespace AttachMetadata {
           raw: `${baseSegment}[`,
           cooked: `${baseSegment}[`,
         }),
-        t.templateElement({ raw: `]${propertySuffix}`, cooked: `]${propertySuffix}` }, true),
+        t.templateElement(
+          { raw: `]${propertySuffix}`, cooked: `]${propertySuffix}` },
+          true,
+        ),
       ],
       [expressionClone],
     );
@@ -1313,7 +1389,7 @@ namespace AttachBridge {
         JSXElement(path: NodePath<JSXElement>) {
           const jsxElement = path.node;
           const bridgeInfo = processJSXElementForBridge(jsxElement, path);
-          
+
           if (bridgeInfo.shouldWrap) {
             wrapWithBridge(path, options, bridgeInfo.editorId);
           }
@@ -1322,43 +1398,50 @@ namespace AttachBridge {
     };
   }
 
-  function processJSXElementForBridge(jsxElement: JSXElement, path: NodePath<JSXElement>): { 
-    shouldWrap: boolean; 
-    editorId: string | null; 
+  function processJSXElementForBridge(
+    jsxElement: JSXElement,
+    path: NodePath<JSXElement>,
+  ): {
+    shouldWrap: boolean;
+    editorId: string | null;
   } {
     if (!t.isJSXIdentifier(jsxElement.openingElement.name)) {
       return { shouldWrap: false, editorId: null };
     }
-    
+
     const tagName = jsxElement.openingElement.name.name;
     const firstChar = tagName.charCodeAt(0);
     const isHTML = firstChar >= 97 && firstChar <= 122;
-    
+
     if (!isHTML) {
       return { shouldWrap: false, editorId: null };
     }
-    
+
     const parent = path.parentPath;
     const isAlreadyWrapped = !!(
       parent?.isJSXElement() &&
       t.isJSXIdentifier(parent.node.openingElement.name) &&
       parent.node.openingElement.name.name === "LivePreviewBridge"
     );
-    
+
     if (isAlreadyWrapped) {
       return { shouldWrap: false, editorId: null };
     }
-    
+
     const editorIdAttr = jsxElement.openingElement.attributes.find(
       (attr): attr is JSXAttribute =>
-        t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name) && attr.name.name === "data-editor-id"
+        t.isJSXAttribute(attr) &&
+        t.isJSXIdentifier(attr.name) &&
+        attr.name.name === "data-editor-id",
     );
-    
-    const editorId = editorIdAttr && t.isStringLiteral(editorIdAttr.value) ? editorIdAttr.value.value : null;
-    
+
+    const editorId =
+      editorIdAttr && t.isStringLiteral(editorIdAttr.value)
+        ? editorIdAttr.value.value
+        : null;
+
     return { shouldWrap: !!editorId, editorId };
   }
-
 
   function wrapWithBridge(
     path: NodePath<JSXElement>,
@@ -1366,7 +1449,7 @@ namespace AttachBridge {
     editorId: string | null,
   ): void {
     if (!editorId) return;
-    
+
     const original = path.node;
     const debug = !!options.debugger;
     const messageType = options.messageType || "ELEMENT_UPDATE";
@@ -1456,15 +1539,17 @@ namespace DetachMetadata {
         JSXOpeningElement(path) {
           const openingElement = path.node;
           const attrs = openingElement.attributes;
-          
+
           for (let i = attrs.length - 1; i >= 0; i--) {
             const attr = attrs[i];
             if (t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name)) {
               const attrName = attr.name.name;
-              if (attrName === "data-editor-id" || 
-                  attrName === "data-component-file" || 
-                  attrName === "data-component-name" || 
-                  attrName === "data-rendered-by") {
+              if (
+                attrName === "data-editor-id" ||
+                attrName === "data-component-file" ||
+                attrName === "data-component-name" ||
+                attrName === "data-rendered-by"
+              ) {
                 attrs.splice(i, 1);
               }
             }

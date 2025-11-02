@@ -42,17 +42,15 @@ describe("Loop metadata generation", () => {
   test("adds dynamic IDs and data source metadata for static in-file collections", () => {
     const output = transform(faqsComponent, "Example-static.jsx");
 
+    expect(output).toMatch(/data-editor-id="[a-f0-9]{12}"/);
     expect(output).toMatch(
-      /data-editor-id=\{\s*`[a-f0-9]{12}:\$\{index\}`\s*\}/,
+      /<span[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.question`\s*\}/,
     );
     expect(output).toMatch(
-      /<span[^>]*data-editor-id=\{\s*`[a-f0-9]{12}:\$\{index\}`\s*\}[^>]*data-children-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.question`\s*\}/,
+      /<p[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.answer`\s*\}/,
     );
     expect(output).toMatch(
-      /<p[^>]*data-editor-id=\{\s*`[a-f0-9]{12}:\$\{index\}`\s*\}[^>]*data-children-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.answer`\s*\}/,
-    );
-    expect(output).toMatch(
-      /<img[^>]*data-editor-id=\{\s*`[a-f0-9]{12}:\$\{index\}`\s*\}[^>]*data-img-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.image`\s*\}/,
+      /<img[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-img-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.image`\s*\}/,
     );
     expect(output).not.toMatch(
       /<div key=\{index\}[^>]*data-children-source=/,

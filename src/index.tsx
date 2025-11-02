@@ -378,7 +378,6 @@ namespace AttachMetadata {
   };
 
   type LoopContext = {
-    idExpression: Expression | null;
     sourceExpression: Expression | null;
     itemParamNames: Set<string>;
     collectionSourceName: string;
@@ -674,27 +673,15 @@ namespace AttachMetadata {
     const openingElement = elementPath.node.openingElement;
     const keyExpression = getKeyExpression(elementPath);
 
-    const idExpressionBase =
-      keyExpression ??
-      (indexExpression ? t.cloneNode(indexExpression, true) : null);
     const sourceExpressionBase =
       (indexExpression ? t.cloneNode(indexExpression, true) : null) ??
       (keyExpression ? t.cloneNode(keyExpression, true) : null);
 
-    if (idExpressionBase) {
-      addRenderedByAttributes(openingElement, filename, context, {
-        dynamicSuffix: t.cloneNode(idExpressionBase, true),
-      });
-    } else {
-      addRenderedByAttributes(openingElement, filename, context);
-    }
+    addRenderedByAttributes(openingElement, filename, context);
 
     processJSXChildren(elementPath.node, filename, false, context);
 
     const loopContext: LoopContext = {
-      idExpression: idExpressionBase
-        ? t.cloneNode(idExpressionBase, true)
-        : null,
       sourceExpression: sourceExpressionBase
         ? t.cloneNode(sourceExpressionBase, true)
         : null,
@@ -792,21 +779,6 @@ namespace AttachMetadata {
       }
 
       const isComponent = isReactComponent(currentPath.node);
-
-      if (
-        loopContext.idExpression &&
-        !isComponent &&
-        elementReferencesParamNames(currentPath, loopContext.itemParamNames)
-      ) {
-        addRenderedByAttributes(
-          currentPath.node.openingElement,
-          filename,
-          context,
-          {
-            dynamicSuffix: cloneLoopExpression(loopContext.idExpression),
-          },
-        );
-      }
 
       annotateDynamicChildrenForElement(currentPath, filename, loopContext);
       annotateImgSource(currentPath, filename, loopContext);

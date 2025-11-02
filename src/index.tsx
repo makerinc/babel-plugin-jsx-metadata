@@ -3,15 +3,21 @@ import crypto from "node:crypto";
 import type { NodePath } from "@babel/traverse";
 import { type PluginObj, types as t } from "@babel/core";
 import type {
+  ArrowFunctionExpression,
+  FunctionExpression,
   CallExpression,
   JSXAttribute,
+  JSXAttributeValue,
   JSXElement,
   JSXExpressionContainer,
   JSXFragment,
   JSXOpeningElement,
   JSXSpreadChild,
   JSXText,
+  LVal,
   ReturnStatement,
+  Expression,
+  PrivateName,
 } from "@babel/types";
 
 namespace AttachMetadata {
@@ -31,6 +37,8 @@ namespace AttachMetadata {
     elementPath: string[];
   };
 
+  const processedLoopElements = new WeakSet<JSXElement>();
+
   function getElementTagName(jsxElement: JSXElementLike): string {
     if (t.isJSXElement(jsxElement)) {
       if (t.isJSXIdentifier(jsxElement.openingElement.name)) {
@@ -43,19 +51,15 @@ namespace AttachMetadata {
     return "unknown";
   }
 
-  function isValidMD5Id(id: string): boolean {
-    if (id.length !== 12) return false;
-    for (let i = 0; i < 12; i++) {
-      const c = id.charCodeAt(i);
-      if (!((c >= 48 && c <= 57) || (c >= 97 && c <= 102))) return false;
-    }
-    return true;
-  }
+  type IdAssignmentOptions = {
+    dynamicSuffix?: Expression | null;
+  };
 
   function assignElementId(
     openingElement: JSXOpeningElement,
     context: IdGenerationContext,
-  ): void {
+    options: IdAssignmentOptions = {},
+  ): string {
     const existingIdAttr = openingElement.attributes.find(
       (attr): attr is JSXAttribute =>
         t.isJSXAttribute(attr) &&
@@ -71,7 +75,6 @@ namespace AttachMetadata {
       if (
         existingId &&
         existingId.trim() !== "" &&
-        isValidMD5Id(existingId) &&
         !context.usedIds.has(existingId)
       ) {
         finalId = existingId;
@@ -84,8 +87,39 @@ namespace AttachMetadata {
 
     context.usedIds.add(finalId);
 
-    setOrUpdateAttribute(openingElement, "data-editor-id", finalId);
+    const dynamicSuffix = options?.dynamicSuffix
+      ? (t.cloneNode(options.dynamicSuffix, true) as Expression)
+      : null;
+
+    if (dynamicSuffix) {
+      const template = t.templateLiteral(
+        [
+          t.templateElement({
+            raw: `${finalId}:`,
+            cooked: `${finalId}:`,
+          }),
+          t.templateElement({ raw: "", cooked: "" }, true),
+        ],
+        [dynamicSuffix],
+      );
+
+      setOrUpdateAttribute(
+        openingElement,
+        "data-editor-id",
+        t.jsxExpressionContainer(template),
+      );
+    } else {
+      setOrUpdateAttribute(openingElement, "data-editor-id", finalId);
+    }
+
+    return finalId;
   }
+
+  type AttributeValue =
+    | string
+    | Expression
+    | t.StringLiteral
+    | t.JSXExpressionContainer;
 
   function generateNewId(context: IdGenerationContext): string {
     let newId: string;
@@ -110,17 +144,35 @@ namespace AttachMetadata {
   function setOrUpdateAttribute(
     openingElement: JSXOpeningElement,
     name: string,
-    value: string,
+    value: AttributeValue,
   ): void {
+    const normalizedValue = normalizeAttributeValue(value);
+
     const attrs = openingElement.attributes;
     for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
       if (t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name) && attr.name.name === name) {
-        attrs[i] = t.jsxAttribute(t.jsxIdentifier(name), t.stringLiteral(value));
+        attrs[i] = t.jsxAttribute(t.jsxIdentifier(name), normalizedValue);
         return;
       }
     }
-    attrs.push(t.jsxAttribute(t.jsxIdentifier(name), t.stringLiteral(value)));
+    attrs.push(t.jsxAttribute(t.jsxIdentifier(name), normalizedValue));
+  }
+
+  function normalizeAttributeValue(value: AttributeValue): JSXAttributeValue {
+    if (typeof value === "string") {
+      return t.stringLiteral(value);
+    }
+
+    if (t.isJSXExpressionContainer(value)) {
+      return value;
+    }
+
+    if (t.isStringLiteral(value)) {
+      return value;
+    }
+
+    return t.jsxExpressionContainer(value);
   }
 
   function addComponentAttributes(
@@ -128,19 +180,21 @@ namespace AttachMetadata {
     filename: string,
     componentName: string,
     context: IdGenerationContext,
+    idOptions: IdAssignmentOptions = {},
   ): void {
     setOrUpdateAttribute(openingElement, "data-component-file", filename);
     setOrUpdateAttribute(openingElement, "data-component-name", componentName);
-    assignElementId(openingElement, context);
+    assignElementId(openingElement, context, idOptions);
   }
 
   function addRenderedByAttributes(
     openingElement: JSXOpeningElement,
     filename: string,
     context: IdGenerationContext,
+    idOptions: IdAssignmentOptions = {},
   ): void {
     setOrUpdateAttribute(openingElement, "data-rendered-by", filename);
-    assignElementId(openingElement, context);
+    assignElementId(openingElement, context, idOptions);
   }
 
   function getComponentName(path: NodePath): string | null {
@@ -213,6 +267,20 @@ namespace AttachMetadata {
       elementCounter: 0,
       elementPath: [],
     };
+
+    let functionLikePath: NodePath | null = null;
+    if (path.isFunctionDeclaration()) {
+      functionLikePath = path;
+    } else if (path.isVariableDeclarator()) {
+      const initPath = path.get("init");
+      if (
+        initPath &&
+        (initPath.isFunctionExpression() || initPath.isArrowFunctionExpression())
+      ) {
+        functionLikePath = initPath;
+      }
+    }
+
     if (path.isFunctionDeclaration()) {
       path.traverse({
         ReturnStatement(returnPath: NodePath<ReturnStatement>) {
@@ -276,6 +344,703 @@ namespace AttachMetadata {
         });
       }
     }
+
+    if (
+      functionLikePath &&
+      (functionLikePath.isFunctionDeclaration() ||
+        functionLikePath.isFunctionExpression() ||
+        functionLikePath.isArrowFunctionExpression())
+    ) {
+      functionLikePath.traverse({
+        CallExpression(callPath: NodePath<CallExpression>) {
+          processCollectionRenderingCall(
+            callPath,
+            filename,
+            context,
+            functionLikePath as NodePath,
+          );
+        },
+      });
+    }
+  }
+
+  type CollectionSourceInfo = {
+    sourceName: string;
+  };
+
+  type LoopContext = {
+    idExpression: Expression | null;
+    sourceExpression: Expression | null;
+    itemParamNames: Set<string>;
+    collectionSourceName: string;
+  };
+
+  function processCollectionRenderingCall(
+    callPath: NodePath<CallExpression>,
+    filename: string,
+    context: IdGenerationContext,
+    componentFunctionPath: NodePath,
+  ): void {
+    if (!filename) return;
+
+    if (!callPath.findParent((parent) => parent.isJSXExpressionContainer())) {
+      return;
+    }
+
+    const calleePath = callPath.get("callee");
+    if (!calleePath.isMemberExpression()) return;
+
+    const propertyPath = calleePath.get("property");
+    if (!propertyPath.isIdentifier({ name: "map" })) return;
+
+    const functionParent = callPath.getFunctionParent();
+    if (!functionParent) return;
+    if (!isWithinComponentFunction(functionParent, componentFunctionPath)) {
+      return;
+    }
+
+    const callbackArgPath = callPath.get("arguments")[0];
+    if (
+      !callbackArgPath ||
+      (!callbackArgPath.isArrowFunctionExpression() &&
+        !callbackArgPath.isFunctionExpression())
+    ) {
+      return;
+    }
+
+    const sourceObjectPath = calleePath.get("object");
+    if (!sourceObjectPath.isIdentifier()) return;
+
+    const collectionInfo = resolveCollectionSourceInfo(sourceObjectPath);
+    if (!collectionInfo) return;
+
+    const returnedElements = getReturnedJSXElements(callbackArgPath);
+    if (returnedElements.length === 0) return;
+
+    const itemParamNames = new Set<string>();
+    if (callbackArgPath.node.params.length > 0) {
+      const firstParam = callbackArgPath.node.params[0];
+      if (firstParam) {
+        collectNamesFromPattern(firstParam, itemParamNames);
+      }
+    }
+
+    if (itemParamNames.size === 0) return;
+
+    const indexExpression = getIndexParamExpression(callbackArgPath);
+
+    returnedElements.forEach((elementPath) => {
+      if (!elementPath.isJSXElement()) return;
+
+      processLoopElement(
+        elementPath,
+        filename,
+        context,
+        collectionInfo,
+        itemParamNames,
+        indexExpression,
+      );
+    });
+  }
+
+  function isWithinComponentFunction(
+    functionPath: NodePath,
+    componentFunctionPath: NodePath,
+  ): boolean {
+    let current: NodePath | null = functionPath;
+
+    while (current) {
+      if (current.node === componentFunctionPath.node) {
+        return true;
+      }
+      current = current.getFunctionParent();
+    }
+
+    return false;
+  }
+
+  function resolveCollectionSourceInfo(
+    sourceIdentifierPath: NodePath<t.Identifier>,
+  ): CollectionSourceInfo | null {
+    const binding = sourceIdentifierPath.scope.getBinding(
+      sourceIdentifierPath.node.name,
+    );
+
+    if (!binding) return null;
+    if (binding.kind === "module") return null;
+    if (!binding.path.isVariableDeclarator()) return null;
+
+    const initPath = binding.path.get("init");
+    const initNode = initPath?.node ? unwrapStaticInitializer(initPath.node) : null;
+
+    if (!initNode || !isStaticCollectionExpression(initNode)) {
+      return null;
+    }
+
+    return {
+      sourceName: sourceIdentifierPath.node.name,
+    };
+  }
+
+  function unwrapStaticInitializer(node: t.Node): t.Node {
+    if (t.isTSAsExpression(node) || t.isTypeCastExpression(node)) {
+      return unwrapStaticInitializer(node.expression);
+    }
+    if (t.isTSTypeAssertion(node)) {
+      return unwrapStaticInitializer(node.expression);
+    }
+    return node;
+  }
+
+  function isStaticCollectionExpression(node: t.Node | null): node is t.ArrayExpression {
+    if (!node) return false;
+    const resolved = unwrapStaticInitializer(node);
+    return t.isArrayExpression(resolved);
+  }
+
+  function getReturnedJSXElements(
+    callbackPath: NodePath<ArrowFunctionExpression | FunctionExpression>,
+  ): NodePath<JSXElement>[] {
+    const elements: NodePath<JSXElement>[] = [];
+    const bodyPath = callbackPath.get("body");
+
+    if (bodyPath.isJSXElement()) {
+      elements.push(bodyPath as NodePath<JSXElement>);
+      return elements;
+    }
+
+    if (bodyPath.isJSXFragment()) {
+      const children = bodyPath.get("children");
+      children.forEach((childPath) => {
+        if (Array.isArray(childPath)) return;
+        if (childPath.isJSXElement()) {
+          elements.push(childPath);
+        }
+      });
+      return elements;
+    }
+
+    if (bodyPath.isBlockStatement()) {
+      bodyPath.traverse(
+        {
+          ReturnStatement(returnPath) {
+            const argumentPath = returnPath.get("argument");
+            if (!argumentPath) return;
+
+            if (argumentPath.isJSXElement()) {
+              elements.push(argumentPath as NodePath<JSXElement>);
+            } else if (argumentPath.isJSXFragment()) {
+              const fragmentChildren = argumentPath.get("children");
+              fragmentChildren.forEach((fragmentChild) => {
+                if (Array.isArray(fragmentChild)) return;
+                if (fragmentChild.isJSXElement()) {
+                  elements.push(fragmentChild);
+                }
+              });
+            }
+          },
+          Function(innerFnPath) {
+            innerFnPath.skip();
+          },
+          ArrowFunctionExpression(innerArrowPath) {
+            innerArrowPath.skip();
+          },
+        },
+        undefined,
+        {},
+      );
+    }
+
+    return elements;
+  }
+
+  function collectNamesFromPattern(param: LVal, names: Set<string>): void {
+    if (t.isIdentifier(param)) {
+      names.add(param.name);
+      return;
+    }
+
+    if (t.isAssignmentPattern(param)) {
+      collectNamesFromPattern(param.left, names);
+      return;
+    }
+
+    if (t.isRestElement(param)) {
+      collectNamesFromPattern(param.argument as LVal, names);
+      return;
+    }
+
+    if (t.isObjectPattern(param)) {
+      param.properties.forEach((prop) => {
+        if (t.isObjectProperty(prop)) {
+          const value = prop.value as LVal;
+          collectNamesFromPattern(value, names);
+        } else if (t.isRestElement(prop)) {
+          collectNamesFromPattern(prop.argument as LVal, names);
+        }
+      });
+      return;
+    }
+
+    if (t.isArrayPattern(param)) {
+      param.elements.forEach((element) => {
+        if (!element) return;
+        if (t.isRestElement(element)) {
+          collectNamesFromPattern(element.argument as LVal, names);
+        } else {
+          collectNamesFromPattern(element as LVal, names);
+        }
+      });
+    }
+  }
+
+  function getIndexParamExpression(
+    callbackPath: NodePath<ArrowFunctionExpression | FunctionExpression>,
+  ): Expression | null {
+    if (callbackPath.node.params.length < 2) return null;
+    const indexParam = callbackPath.node.params[1];
+    if (!indexParam) return null;
+
+    if (t.isIdentifier(indexParam)) {
+      return t.identifier(indexParam.name);
+    }
+
+    if (t.isAssignmentPattern(indexParam) && t.isIdentifier(indexParam.left)) {
+      return t.identifier(indexParam.left.name);
+    }
+
+    return null;
+  }
+
+  function processLoopElement(
+    elementPath: NodePath<JSXElement>,
+    filename: string,
+    context: IdGenerationContext,
+    collectionInfo: CollectionSourceInfo,
+    itemParamNames: Set<string>,
+    indexExpression: Expression | null,
+  ): void {
+    if (processedLoopElements.has(elementPath.node)) return;
+    if (!elementReferencesParamNames(elementPath, itemParamNames)) return;
+
+    processedLoopElements.add(elementPath.node);
+
+    const openingElement = elementPath.node.openingElement;
+    const keyExpression = getKeyExpression(elementPath);
+
+    const idExpressionBase = keyExpression ?? (indexExpression ? t.cloneNode(indexExpression, true) : null);
+    const sourceExpressionBase =
+      (indexExpression ? t.cloneNode(indexExpression, true) : null) ??
+      (keyExpression ? t.cloneNode(keyExpression, true) : null);
+
+    if (idExpressionBase) {
+      addRenderedByAttributes(openingElement, filename, context, {
+        dynamicSuffix: t.cloneNode(idExpressionBase, true),
+      });
+    } else {
+      addRenderedByAttributes(openingElement, filename, context);
+    }
+
+    processJSXChildren(elementPath.node, filename, false, context);
+
+    const loopContext: LoopContext = {
+      idExpression: idExpressionBase ? t.cloneNode(idExpressionBase, true) : null,
+      sourceExpression: sourceExpressionBase ? t.cloneNode(sourceExpressionBase, true) : null,
+      itemParamNames,
+      collectionSourceName: collectionInfo.sourceName,
+    };
+
+    applyLoopAnnotations(elementPath, filename, context, loopContext);
+  }
+
+  function getKeyExpression(
+    elementPath: NodePath<JSXElement>,
+  ): Expression | null {
+    const attributes = elementPath
+      .get("openingElement")
+      .get("attributes") as NodePath[];
+
+    for (const attrPath of attributes) {
+      if (!attrPath.isJSXAttribute()) continue;
+
+      const namePath = attrPath.get("name");
+      if (!namePath.isJSXIdentifier({ name: "key" })) continue;
+
+      const valuePath = attrPath.get("value");
+      if (!valuePath?.node) continue;
+
+      if (valuePath.isStringLiteral()) {
+        return t.stringLiteral(valuePath.node.value);
+      }
+
+      if (valuePath.isJSXExpressionContainer()) {
+        const expressionPath = valuePath.get("expression");
+        if (expressionPath && expressionPath.node && t.isExpression(expressionPath.node)) {
+          return t.cloneNode(expressionPath.node, true);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function elementReferencesParamNames(
+    elementPath: NodePath<JSXElement>,
+    names: Set<string>,
+  ): boolean {
+    if (names.size === 0) return false;
+
+    let found = false;
+
+    elementPath.traverse({
+      Identifier(identifierPath) {
+        if (found) {
+          identifierPath.stop();
+          return;
+        }
+        if (!identifierPath.isReferencedIdentifier()) return;
+
+        if (names.has(identifierPath.node.name)) {
+          found = true;
+          identifierPath.stop();
+        }
+      },
+      JSXIdentifier() {
+        // Ignore JSX identifiers - handled separately
+      },
+      Function(innerFnPath) {
+        innerFnPath.skip();
+      },
+      ArrowFunctionExpression(innerArrowPath) {
+        innerArrowPath.skip();
+      },
+    });
+
+    return found;
+  }
+
+  function cloneLoopExpression(expression: Expression | null): Expression | null {
+    return expression ? t.cloneNode(expression, true) : null;
+  }
+
+  function applyLoopAnnotations(
+    elementPath: NodePath<JSXElement>,
+    filename: string,
+    context: IdGenerationContext,
+    loopContext: LoopContext,
+  ): void {
+    const annotateElement = (currentPath: NodePath<JSXElement>): void => {
+      if (processedLoopElements.has(currentPath.node) && currentPath.node !== elementPath.node) {
+        return;
+      }
+
+      const isComponent = isReactComponent(currentPath.node);
+
+      if (
+        loopContext.idExpression &&
+        !isComponent &&
+        elementReferencesParamNames(currentPath, loopContext.itemParamNames)
+      ) {
+        addRenderedByAttributes(currentPath.node.openingElement, filename, context, {
+          dynamicSuffix: cloneLoopExpression(loopContext.idExpression),
+        });
+      }
+
+      annotateDynamicChildrenForElement(currentPath, filename, loopContext);
+      annotateImgSource(currentPath, filename, loopContext);
+    };
+
+    annotateElement(elementPath);
+
+    elementPath.traverse(
+      {
+        JSXElement(innerPath) {
+          annotateElement(innerPath);
+        },
+      },
+      undefined,
+      {},
+    );
+  }
+
+  function annotateDynamicChildrenForElement(
+    elementPath: NodePath<JSXElement>,
+    filename: string,
+    loopContext: LoopContext,
+  ): void {
+    if (!loopContext.sourceExpression) return;
+    if (isReactComponent(elementPath.node)) return;
+
+    const dynamicChildInfo = getDynamicChildInfo(
+      elementPath,
+      loopContext.itemParamNames,
+    );
+
+    if (!dynamicChildInfo) return;
+
+    const value = buildCollectionSourceAttributeValue(
+      filename,
+      loopContext.collectionSourceName,
+      cloneLoopExpression(loopContext.sourceExpression),
+      dynamicChildInfo.propertyPath,
+    );
+
+    if (value) {
+      setOrUpdateAttribute(
+        elementPath.node.openingElement,
+        "data-children-source",
+        value,
+      );
+    }
+  }
+
+  function annotateImgSource(
+    elementPath: NodePath<JSXElement>,
+    filename: string,
+    loopContext: LoopContext,
+  ): void {
+    if (!loopContext.sourceExpression) return;
+
+    const openingElement = elementPath.node.openingElement;
+    if (!t.isJSXIdentifier(openingElement.name)) return;
+    if (openingElement.name.name !== "img") return;
+
+    const attributePaths = elementPath
+      .get("openingElement")
+      .get("attributes") as NodePath[];
+
+    for (const attrPath of attributePaths) {
+      if (!attrPath.isJSXAttribute()) continue;
+      const namePath = attrPath.get("name");
+      if (!namePath.isJSXIdentifier({ name: "src" })) continue;
+
+      const valuePath = attrPath.get("value");
+      if (!valuePath || !valuePath.isJSXExpressionContainer()) continue;
+
+      const expressionPath = valuePath.get("expression");
+      if (!expressionPath || !expressionPath.node || !t.isExpression(expressionPath.node)) continue;
+
+      if (
+        !expressionReferencesNames(
+          expressionPath as NodePath<Expression>,
+          loopContext.itemParamNames,
+        )
+      ) {
+        continue;
+      }
+
+      const propertyPath = extractPropertyPath(
+        expressionPath.node,
+        loopContext.itemParamNames,
+      );
+
+      const sourceValue = buildCollectionSourceAttributeValue(
+        filename,
+        loopContext.collectionSourceName,
+        cloneLoopExpression(loopContext.sourceExpression),
+        propertyPath,
+      );
+
+      if (sourceValue) {
+        setOrUpdateAttribute(openingElement, "data-img-source", sourceValue);
+      }
+    }
+  }
+
+  function expressionReferencesNames(
+    expressionPath: NodePath<Expression>,
+    itemParamNames: Set<string>,
+  ): boolean {
+    if (itemParamNames.size === 0) return false;
+
+    let found = false;
+
+    expressionPath.traverse({
+      Identifier(identifierPath) {
+        if (found) {
+          identifierPath.stop();
+          return;
+        }
+        if (!identifierPath.isReferencedIdentifier()) return;
+
+        if (itemParamNames.has(identifierPath.node.name)) {
+          found = true;
+          identifierPath.stop();
+        }
+      },
+      JSXIdentifier() {
+        // ignore JSX identifiers
+      },
+      Function(innerFnPath) {
+        innerFnPath.skip();
+      },
+      ArrowFunctionExpression(innerArrowPath) {
+        innerArrowPath.skip();
+      },
+    });
+
+    return found;
+  }
+
+  function getDynamicChildInfo(
+    elementPath: NodePath<JSXElement>,
+    itemParamNames: Set<string>,
+  ): { propertyPath: string | null } | null {
+    const childPaths = elementPath.get("children") as NodePath[];
+
+    for (const childPath of childPaths) {
+      if (Array.isArray(childPath)) continue;
+      if (!childPath.isJSXExpressionContainer()) continue;
+
+      const expressionPath = childPath.get("expression");
+      if (!expressionPath || !expressionPath.node || !t.isExpression(expressionPath.node)) {
+        continue;
+      }
+
+      if (
+        !expressionReferencesNames(
+          expressionPath as NodePath<Expression>,
+          itemParamNames,
+        )
+      ) {
+        continue;
+      }
+
+      const propertyPath = extractPropertyPath(
+        expressionPath.node,
+        itemParamNames,
+      );
+
+      return { propertyPath };
+    }
+
+    return null;
+  }
+
+  function extractPropertyPath(
+    expression: Expression,
+    itemParamNames: Set<string>,
+  ): string | null {
+    const unwrapped = unwrapExpression(expression);
+    const path = buildPropertyPathFromExpression(unwrapped, itemParamNames);
+    if (path === null || path === "") return null;
+    return path;
+  }
+
+  function unwrapExpression(expression: Expression): Expression {
+    if (t.isTSAsExpression(expression) || t.isTypeCastExpression(expression)) {
+      return unwrapExpression(expression.expression as Expression);
+    }
+    if (t.isTSTypeAssertion(expression)) {
+      return unwrapExpression(expression.expression as Expression);
+    }
+    if (t.isParenthesizedExpression(expression)) {
+      return unwrapExpression(expression.expression as Expression);
+    }
+    return expression;
+  }
+
+  function buildPropertyPathFromExpression(
+    expression: Expression,
+    itemParamNames: Set<string>,
+  ): string | null {
+    if (t.isIdentifier(expression)) {
+      return itemParamNames.has(expression.name) ? "" : null;
+    }
+
+    if (t.isMemberExpression(expression) && !expression.optional) {
+      if (!t.isExpression(expression.object)) return null;
+      const objectPath = buildPropertyPathFromExpression(
+        expression.object as Expression,
+        itemParamNames,
+      );
+      if (objectPath === null) return null;
+
+      const propertySegment = getPropertySegment(expression.property, expression.computed);
+      if (propertySegment === null) return null;
+      return `${objectPath}${propertySegment}`;
+    }
+
+    if (t.isOptionalMemberExpression(expression)) {
+      if (!t.isExpression(expression.object)) return null;
+      const objectPath = buildPropertyPathFromExpression(
+        expression.object as Expression,
+        itemParamNames,
+      );
+      if (objectPath === null) return null;
+
+      const propertySegment = getPropertySegment(expression.property, expression.computed);
+      if (propertySegment === null) return null;
+
+      return `${objectPath}${propertySegment}`;
+    }
+
+    return null;
+  }
+
+  function getPropertySegment(
+    property: Expression | PrivateName,
+    computed: boolean,
+  ): string | null {
+    if (t.isPrivateName(property)) return null;
+
+    if (!computed) {
+      if (t.isIdentifier(property)) {
+        return `.${property.name}`;
+      }
+      if (t.isStringLiteral(property)) {
+        return `.${property.value}`;
+      }
+    }
+
+    if (t.isStringLiteral(property)) {
+      return `["${property.value}"]`;
+    }
+
+    if (t.isNumericLiteral(property)) {
+      return `[${property.value}]`;
+    }
+
+    return null;
+  }
+
+  function buildCollectionSourceAttributeValue(
+    filename: string,
+    sourceName: string,
+    dynamicExpression: Expression | null,
+    propertyPath: string | null,
+  ): AttributeValue | null {
+    const baseSegment = filename ? `${filename}:${sourceName}` : sourceName;
+    if (!baseSegment) return null;
+
+    const propertySuffix = propertyPath ?? "";
+
+    if (!dynamicExpression) {
+      return `${baseSegment}${propertySuffix}`;
+    }
+
+    if (t.isStringLiteral(dynamicExpression)) {
+      const literal = JSON.stringify(dynamicExpression.value);
+      return `${baseSegment}[${literal}]${propertySuffix}`;
+    }
+
+    if (t.isNumericLiteral(dynamicExpression)) {
+      return `${baseSegment}[${dynamicExpression.value}]${propertySuffix}`;
+    }
+
+    const expressionClone = t.cloneNode(dynamicExpression, true) as Expression;
+    const template = t.templateLiteral(
+      [
+        t.templateElement({
+          raw: `${baseSegment}[`,
+          cooked: `${baseSegment}[`,
+        }),
+        t.templateElement({ raw: `]${propertySuffix}`, cooked: `]${propertySuffix}` }, true),
+      ],
+      [expressionClone],
+    );
+
+    return t.jsxExpressionContainer(template);
   }
 
   function processComponentReturn(

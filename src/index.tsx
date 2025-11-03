@@ -59,7 +59,7 @@ namespace AttachMetadata {
   function assignElementId(
     openingElement: JSXOpeningElement,
     context: IdGenerationContext,
-  ): string {
+  ): void {
     const existingIdAttr = openingElement.attributes.find(
       (attr): attr is JSXAttribute =>
         t.isJSXAttribute(attr) &&
@@ -89,8 +89,6 @@ namespace AttachMetadata {
     context.usedIds.add(finalId);
 
     setOrUpdateAttribute(openingElement, "data-editor-id", finalId);
-
-    return finalId;
   }
 
   type AttributeValue =

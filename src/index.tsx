@@ -1119,7 +1119,12 @@ namespace AttachMetadata {
     const startColumn = loc.start.column + 1;
     const endLine = loc.end.line;
     const endColumn = loc.end.column + 1;
-    return `${filename}:${startLine}:${startColumn}-${endLine}:${endColumn}`;
+    const locationDescriptor = {
+      file: filename,
+      start: `${startLine}:${startColumn}`,
+      end: `${endLine}:${endColumn}`,
+    } as const;
+    return JSON.stringify(locationDescriptor);
   }
 
   function processComponentReturn(

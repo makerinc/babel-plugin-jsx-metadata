@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
-const path = require("path");
-const { transformSync } = require("@babel/core");
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { transformSync } from "@babel/core";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function generateMinifiedLivePreviewBridge() {
   try {

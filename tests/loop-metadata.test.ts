@@ -44,13 +44,13 @@ describe("Loop metadata generation", () => {
 
     expect(output).toMatch(/data-editor-id="[a-f0-9]{12}"/);
     expect(output).toMatch(
-      /<span[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.question`\s*\}/,
+      /<span[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*\[[^\]]*Example-static\.jsx:\d+:\d+-\d+:\d+[^\]]*\]\s*\[index\]\s*\}/,
     );
     expect(output).toMatch(
-      /<p[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.answer`\s*\}/,
+      /<p[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*\[[^\]]*Example-static\.jsx:\d+:\d+-\d+:\d+[^\]]*\]\s*\[index\]\s*\}/,
     );
     expect(output).toMatch(
-      /<img[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-img-source=\{\s*`Example-static\.jsx:faqs\[\$\{index\}\]\.image`\s*\}/,
+      /<img[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-img-source=\{\s*\[[^\]]*Example-static\.jsx:\d+:\d+-\d+:\d+[^\]]*\]\s*\[index\]\s*\}/,
     );
     expect(output).not.toMatch(
       /<div key=\{index\}[^>]*data-children-source=/,

@@ -39,7 +39,9 @@ export function detachMetadata(
               attrName === "data-editor-id" ||
               attrName === "data-component-file" ||
               attrName === "data-component-name" ||
-              attrName === "data-rendered-by"
+              attrName === "data-rendered-by" ||
+              attrName === "data-children-source" ||
+              attrName === "data-img-source"
             ) {
               attrs.splice(i, 1);
             }

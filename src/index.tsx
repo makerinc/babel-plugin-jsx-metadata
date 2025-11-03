@@ -47,14 +47,9 @@ namespace AttachMetadata {
     return "unknown";
   }
 
-  type IdAssignmentOptions = {
-    dynamicSuffix?: Expression | null;
-  };
-
   function assignElementId(
     openingElement: JSXOpeningElement,
     context: IdGenerationContext,
-    options: IdAssignmentOptions = {},
   ): string {
     const existingIdAttr = openingElement.attributes.find(
       (attr): attr is JSXAttribute =>
@@ -83,30 +78,7 @@ namespace AttachMetadata {
 
     context.usedIds.add(finalId);
 
-    const dynamicSuffix = options?.dynamicSuffix
-      ? (t.cloneNode(options.dynamicSuffix, true) as Expression)
-      : null;
-
-    if (dynamicSuffix) {
-      const template = t.templateLiteral(
-        [
-          t.templateElement({
-            raw: `${finalId}:`,
-            cooked: `${finalId}:`,
-          }),
-          t.templateElement({ raw: "", cooked: "" }, true),
-        ],
-        [dynamicSuffix],
-      );
-
-      setOrUpdateAttribute(
-        openingElement,
-        "data-editor-id",
-        t.jsxExpressionContainer(template),
-      );
-    } else {
-      setOrUpdateAttribute(openingElement, "data-editor-id", finalId);
-    }
+    setOrUpdateAttribute(openingElement, "data-editor-id", finalId);
 
     return finalId;
   }
@@ -184,21 +156,19 @@ namespace AttachMetadata {
     filename: string,
     componentName: string,
     context: IdGenerationContext,
-    idOptions: IdAssignmentOptions = {},
   ): void {
     setOrUpdateAttribute(openingElement, "data-component-file", filename);
     setOrUpdateAttribute(openingElement, "data-component-name", componentName);
-    assignElementId(openingElement, context, idOptions);
+    assignElementId(openingElement, context);
   }
 
   function addRenderedByAttributes(
     openingElement: JSXOpeningElement,
     filename: string,
     context: IdGenerationContext,
-    idOptions: IdAssignmentOptions = {},
   ): void {
     setOrUpdateAttribute(openingElement, "data-rendered-by", filename);
-    assignElementId(openingElement, context, idOptions);
+    assignElementId(openingElement, context);
   }
 
   function getComponentName(path: NodePath): string | null {

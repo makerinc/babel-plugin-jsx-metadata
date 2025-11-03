@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 
 function generateMinifiedLivePreviewBridge() {
   try {
-    console.log("Generating LivePreviewBridgeSource.js...");
+    console.log("Generating LivePreviewBridgeSource...");
 
     // Read the LivePreviewBridge source directly
     const bridgePath = path.join(__dirname, "../dist/LivePreviewBridge.js");

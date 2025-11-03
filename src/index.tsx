@@ -35,6 +35,19 @@ namespace AttachMetadata {
     elementPath: string[];
   };
 
+  function isValidMD5Id(id: string): boolean {
+    if (id.length !== 12) return false;
+    for (let i = 0; i < 12; i++) {
+      const c = id.charCodeAt(i);
+      const isDigit = c >= 48 && c <= 57;
+      const isLowerHex = c >= 97 && c <= 102;
+      if (!isDigit && !isLowerHex) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   function getElementTagName(jsxElement: JSXElementLike): string {
     if (t.isJSXElement(jsxElement)) {
       if (t.isJSXIdentifier(jsxElement.openingElement.name)) {
@@ -66,6 +79,7 @@ namespace AttachMetadata {
       if (
         existingId &&
         existingId.trim() !== "" &&
+        isValidMD5Id(existingId) &&
         !context.usedIds.has(existingId)
       ) {
         finalId = existingId;

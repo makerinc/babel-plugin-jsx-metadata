@@ -1,5 +1,12 @@
 import { types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
+import {
+  type AttributeValue,
+  buildLocationAttributeValue,
+  extractPropertyAccess,
+  unwrapExpressionPath,
+  type PropertyAccessSegment,
+} from "./propertyAccess";
 import type {
   ArrowFunctionExpression,
   CallExpression,
@@ -8,17 +15,9 @@ import type {
   JSXElement,
   JSXOpeningElement,
   LVal,
-  OptionalMemberExpression,
-  PrivateName,
   SpreadElement,
   TSParameterProperty,
 } from "@babel/types";
-
-type AttributeValue =
-  | string
-  | Expression
-  | t.StringLiteral
-  | t.JSXExpressionContainer;
 
 export type LoopHelpers<Context> = {
   processJSXChildren: (
@@ -53,10 +52,6 @@ type LoopContext<Context> = {
   filename: string;
   context: Context;
 };
-
-type PropertyAccessSegment =
-  | { kind: "property"; name: string }
-  | { kind: "index"; index: number };
 
 const processedLoopElements = new WeakSet<JSXElement>();
 
@@ -168,30 +163,6 @@ function resolveCollectionSourceInfo(
     sourceName: sourceIdentifierPath.node.name,
     elementPaths,
   };
-}
-
-function unwrapExpressionPath(path: NodePath): NodePath<Expression> | null {
-  if (path.isExpression()) {
-    return path as NodePath<Expression>;
-  }
-
-  if (
-    path.isTSAsExpression() ||
-    path.isTypeCastExpression() ||
-    path.isTSTypeAssertion()
-  ) {
-    const expressionPath = path.get("expression");
-    if (Array.isArray(expressionPath)) return null;
-    return unwrapExpressionPath(expressionPath as NodePath);
-  }
-
-  if (path.isParenthesizedExpression()) {
-    const expressionPath = path.get("expression");
-    if (Array.isArray(expressionPath)) return null;
-    return unwrapExpressionPath(expressionPath as NodePath);
-  }
-
-  return null;
 }
 
 function getReturnedJSXElements(
@@ -476,12 +447,12 @@ function annotateDynamicChildrenForElement<Context>(
 
   if (!dynamicChildInfo) return;
 
-  const value = buildCollectionLocationAttributeValue(
+  const value = buildLocationAttributeValue({
     filename,
-    loopContext.collectionInfo,
-    loopContext.indexExpression,
-    dynamicChildInfo.segments,
-  );
+    elementPaths: loopContext.collectionInfo.elementPaths,
+    segments: dynamicChildInfo.segments,
+    indexExpression: loopContext.indexExpression ?? undefined,
+  });
 
   if (value) {
     helpers.setOrUpdateAttribute(
@@ -519,28 +490,16 @@ function annotateImgSource<Context>(
       continue;
     }
 
-    if (
-      !expressionReferencesNames(
-        expressionPath as NodePath<Expression>,
-        loopContext.itemParamNames,
-      )
-    ) {
-      continue;
-    }
+    const access = extractPropertyAccess(expressionPath.node);
+    if (!access) continue;
+    if (!loopContext.itemParamNames.has(access.baseName)) continue;
 
-    const propertySegments = extractPropertySegments(
-      expressionPath.node,
-      loopContext.itemParamNames,
-    );
-
-    if (!propertySegments) continue;
-
-    const sourceValue = buildCollectionLocationAttributeValue(
-      loopContext.filename,
-      collectionInfo,
-      indexExpression,
-      propertySegments,
-    );
+    const sourceValue = buildLocationAttributeValue({
+      filename: loopContext.filename,
+      elementPaths: collectionInfo.elementPaths,
+      segments: access.segments,
+      indexExpression: indexExpression ?? undefined,
+    });
 
     if (sourceValue) {
       helpers.setOrUpdateAttribute(
@@ -550,41 +509,6 @@ function annotateImgSource<Context>(
       );
     }
   }
-}
-
-function expressionReferencesNames(
-  expressionPath: NodePath<Expression>,
-  itemParamNames: Set<string>,
-): boolean {
-  if (itemParamNames.size === 0) return false;
-
-  let found = false;
-
-  expressionPath.traverse({
-    Identifier(identifierPath) {
-      if (found) {
-        identifierPath.stop();
-        return;
-      }
-      if (!identifierPath.isReferencedIdentifier()) return;
-
-      if (itemParamNames.has(identifierPath.node.name)) {
-        found = true;
-        identifierPath.stop();
-      }
-    },
-    JSXIdentifier() {
-      // ignore
-    },
-    Function(innerFnPath) {
-      innerFnPath.skip();
-    },
-    ArrowFunctionExpression(innerArrowPath) {
-      innerArrowPath.skip();
-    },
-  });
-
-  return found;
 }
 
 function getDynamicChildInfo(
@@ -602,215 +526,12 @@ function getDynamicChildInfo(
       continue;
     }
 
-    if (
-      !expressionReferencesNames(
-        expressionPath as NodePath<Expression>,
-        itemParamNames,
-      )
-    ) {
-      continue;
-    }
+    const access = extractPropertyAccess(expressionPath.node);
+    if (!access) continue;
+    if (!itemParamNames.has(access.baseName)) continue;
 
-    const segments = extractPropertySegments(
-      expressionPath.node,
-      itemParamNames,
-    );
-
-    if (!segments) return null;
-
-    return { segments };
+    return { segments: access.segments };
   }
 
   return null;
-}
-
-function extractPropertySegments(
-  expression: Expression,
-  itemParamNames: Set<string>,
-): PropertyAccessSegment[] | null {
-  const unwrapped = unwrapExpression(expression);
-  return buildPropertySegmentsFromExpression(unwrapped, itemParamNames);
-}
-
-function unwrapExpression(expression: Expression): Expression {
-  if (t.isTSAsExpression(expression) || t.isTypeCastExpression(expression)) {
-    return unwrapExpression(expression.expression as Expression);
-  }
-  if (t.isTSTypeAssertion(expression)) {
-    return unwrapExpression(expression.expression as Expression);
-  }
-  if (t.isParenthesizedExpression(expression)) {
-    return unwrapExpression(expression.expression as Expression);
-  }
-  return expression;
-}
-
-function buildPropertySegmentsFromExpression(
-  expression: Expression,
-  itemParamNames: Set<string>,
-): PropertyAccessSegment[] | null {
-  if (t.isIdentifier(expression)) {
-    return itemParamNames.has(expression.name) ? [] : null;
-  }
-
-  if (t.isMemberExpression(expression) && !expression.optional) {
-    if (!t.isExpression(expression.object)) return null;
-    const baseSegments = buildPropertySegmentsFromExpression(
-      expression.object as Expression,
-      itemParamNames,
-    );
-    if (!baseSegments) return null;
-
-    const segment = getPropertyAccessSegment(
-      expression.property,
-      expression.computed,
-    );
-    if (!segment) return null;
-
-    return [...baseSegments, segment];
-  }
-
-  if (t.isOptionalMemberExpression(expression)) {
-    if (!t.isExpression(expression.object)) return null;
-    const baseSegments = buildPropertySegmentsFromExpression(
-      (expression as OptionalMemberExpression).object as Expression,
-      itemParamNames,
-    );
-    if (!baseSegments) return null;
-
-    const segment = getPropertyAccessSegment(
-      expression.property,
-      expression.computed,
-    );
-    if (!segment) return null;
-
-    return [...baseSegments, segment];
-  }
-
-  return null;
-}
-
-function getPropertyAccessSegment(
-  property: Expression | PrivateName,
-  computed: boolean,
-): PropertyAccessSegment | null {
-  if (t.isPrivateName(property)) return null;
-
-  if (!computed) {
-    if (t.isIdentifier(property)) {
-      return { kind: "property", name: property.name };
-    }
-    if (t.isStringLiteral(property)) {
-      return { kind: "property", name: property.value };
-    }
-  }
-
-  if (t.isStringLiteral(property)) {
-    return { kind: "property", name: property.value };
-  }
-
-  if (t.isNumericLiteral(property)) {
-    return { kind: "index", index: property.value };
-  }
-
-  return null;
-}
-
-function buildCollectionLocationAttributeValue(
-  filename: string,
-  collectionInfo: CollectionSourceInfo,
-  indexExpression: Expression | null,
-  segments: PropertyAccessSegment[],
-): AttributeValue | null {
-  const locations = collectionInfo.elementPaths.map((elementPath) =>
-    getLocationForSegments(filename, elementPath, segments),
-  );
-
-  const availableLocations = locations.filter((loc): loc is string => !!loc);
-  if (availableLocations.length === 0) {
-    return null;
-  }
-
-  if (!indexExpression) {
-    if (availableLocations.length === 1) {
-      return availableLocations[0];
-    }
-    return null;
-  }
-
-  if (collectionInfo.elementPaths.length === 1) {
-    return availableLocations[0] ?? null;
-  }
-
-  const locationElements = locations.map((loc) =>
-    loc ? t.stringLiteral(loc) : t.nullLiteral(),
-  );
-
-  const locationArrayExpr = t.arrayExpression(locationElements);
-  const accessExpr = t.memberExpression(
-    locationArrayExpr,
-    t.cloneNode(indexExpression, true),
-    true,
-  );
-
-  return t.jsxExpressionContainer(accessExpr);
-}
-
-function getLocationForSegments(
-  filename: string,
-  elementPath: NodePath<Expression | SpreadElement | null>,
-  segments: PropertyAccessSegment[],
-): string | null {
-  if (!elementPath.node) return null;
-  if (elementPath.isSpreadElement()) return null;
-
-  let currentNode: t.Node | null = elementPath.node;
-
-  for (const segment of segments) {
-    if (segment.kind === "property") {
-      if (!t.isObjectExpression(currentNode)) return null;
-      let matchedProperty: t.ObjectProperty | null = null;
-      for (const prop of currentNode.properties) {
-        if (!t.isObjectProperty(prop)) continue;
-        if (t.isIdentifier(prop.key) && prop.key.name === segment.name) {
-          matchedProperty = prop;
-          break;
-        }
-        if (t.isStringLiteral(prop.key) && prop.key.value === segment.name) {
-          matchedProperty = prop;
-          break;
-        }
-      }
-
-      if (!matchedProperty) {
-        return null;
-      }
-
-      currentNode = matchedProperty.value;
-    } else {
-      if (!t.isArrayExpression(currentNode)) return null;
-      const arrayElement: t.Node | null | undefined =
-        currentNode.elements[segment.index];
-      if (!arrayElement || !t.isExpression(arrayElement)) return null;
-      currentNode = arrayElement;
-    }
-  }
-
-  const loc = currentNode?.loc ?? elementPath.node.loc;
-  if (!loc) return null;
-
-  return formatLocation(filename, loc);
-}
-
-function formatLocation(filename: string, loc: t.SourceLocation): string {
-  const startLine = loc.start.line;
-  const startColumn = loc.start.column + 1;
-  const endLine = loc.end.line;
-  const endColumn = loc.end.column + 1;
-  const locationDescriptor = {
-    file: filename,
-    start: `${startLine}:${startColumn}`,
-    end: `${endLine}:${endColumn}`,
-  } as const;
-  return JSON.stringify(locationDescriptor);
 }

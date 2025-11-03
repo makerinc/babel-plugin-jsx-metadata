@@ -14,9 +14,10 @@ import type {
   JSXSpreadChild,
   JSXText,
   ReturnStatement,
-  Expression,
 } from "@babel/types";
 import { attachLoopMetadata, type LoopHelpers } from "./loopMetadata";
+import { attachVariableMetadata } from "./variableMetadata";
+import type { AttributeValue } from "./propertyAccess";
 
 type JSXChild =
   | JSXText
@@ -46,15 +47,6 @@ function getElementTagName(jsxElement: JSXElementLike): string {
   return "unknown";
 }
 
-function isValidMD5Id(id: string): boolean {
-  if (id.length !== 12) return false;
-  for (let i = 0; i < 12; i++) {
-    const c = id.charCodeAt(i);
-    if (!((c >= 48 && c <= 57) || (c >= 97 && c <= 102))) return false;
-  }
-  return true;
-}
-
 function assignElementId(
   openingElement: JSXOpeningElement,
   context: IdGenerationContext,
@@ -74,7 +66,6 @@ function assignElementId(
     if (
       existingId &&
       existingId.trim() !== "" &&
-      isValidMD5Id(existingId) &&
       !context.usedIds.has(existingId)
     ) {
       finalId = existingId;
@@ -89,12 +80,6 @@ function assignElementId(
 
   setOrUpdateAttribute(openingElement, "data-editor-id", finalId);
 }
-
-type AttributeValue =
-  | string
-  | Expression
-  | t.StringLiteral
-  | t.JSXExpressionContainer;
 
 type NormalizedAttributeValue = t.JSXAttribute["value"];
 
@@ -327,6 +312,15 @@ function processComponent(
       setOrUpdateAttribute,
       isReactComponent,
     };
+
+    attachVariableMetadata({
+      functionLikePath: functionLikePath as NodePath<
+        ArrowFunctionExpression | FunctionExpression | t.FunctionDeclaration
+      >,
+      filename,
+      context,
+      helpers: loopHelpers,
+    });
 
     attachLoopMetadata({
       functionLikePath: functionLikePath as NodePath<

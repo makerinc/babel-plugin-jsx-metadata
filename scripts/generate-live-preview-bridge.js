@@ -37,8 +37,8 @@ function generateMinifiedLivePreviewBridge() {
 
     // Replace the empty string with the actual minified code
     indexContent = indexContent.replace(
-      'export const LivePreviewBridgeSource = "";',
-      `export const LivePreviewBridgeSource = ${JSON.stringify(minifiedCode)};`,
+      'exports.LivePreviewBridgeSource = "";',
+      `exports.LivePreviewBridgeSource = ${JSON.stringify(minifiedCode)};`,
     );
 
     fs.writeFileSync(indexJsPath, indexContent);

@@ -10,7 +10,8 @@ export type AttributeValue =
 
 export type PropertyAccessSegment =
   | { kind: "property"; name: string }
-  | { kind: "index"; index: number };
+  | { kind: "index"; index: number }
+  | { kind: "variable_index"; variable: string };
 
 export type PropertyAccess = {
   baseName: string;
@@ -156,13 +157,30 @@ export function buildAccessorString(
         // Use bracket notation for invalid identifiers
         result += `["${segment.name}"]`;
       }
-    } else {
-      // Array index access
+    } else if (segment.kind === "index") {
+      // Numeric array index access
       result += `[${segment.index}]`;
+    } else if (segment.kind === "variable_index") {
+      // Variable array index access (e.g., [i], [index])
+      result += `[${segment.variable}]`;
     }
   }
   
   return result;
+}
+
+export function buildLoopAccessorSegments(
+  segments: PropertyAccessSegment[],
+  indexParamName: string = "index",
+): PropertyAccessSegment[] {
+  // For loop contexts, prepend an array access segment using the index parameter
+  // This converts segments like [{ kind: "property", name: "question" }]
+  // into [{ kind: "variable_index", variable: "i" }, { kind: "property", name: "question" }]
+  // which will generate "collection[i].question" instead of "collection.question"
+  return [
+    { kind: "variable_index", variable: indexParamName },
+    ...segments
+  ];
 }
 
 type LocationAttributeParams = {
@@ -250,12 +268,20 @@ function getLocationForSegments(
       }
 
       currentNode = matchedProperty.value;
-    } else {
+    } else if (segment.kind === "index") {
       if (!t.isArrayExpression(currentNode)) return null;
       const arrayElement: t.Node | null | undefined =
         currentNode.elements[segment.index];
       if (!arrayElement || !t.isExpression(arrayElement)) return null;
       currentNode = arrayElement;
+    } else if (segment.kind === "variable_index") {
+      // Variable index segments (like [i]) can't be resolved statically
+      // For static analysis, we skip these segments and use the array itself
+      // The accessor string will still include the variable index
+      if (!t.isArrayExpression(currentNode)) return null;
+      // Keep currentNode as the array itself since we can't resolve [variable] statically
+      // This means we'll get the source location of the array declaration
+      break; // Stop processing further segments since we can't resolve variable indices
     }
   }
 

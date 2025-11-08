@@ -5,6 +5,7 @@ import {
   buildLocationAttributeValue,
   extractPropertyAccess,
   unwrapExpressionPath,
+  buildLoopAccessorSegments,
   type PropertyAccessSegment,
 } from "./propertyAccess";
 import type {
@@ -46,6 +47,7 @@ type CollectionSourceInfo = {
 
 type LoopContext<Context> = {
   indexExpression: Expression | null;
+  indexParamName: string | null;
   itemParamNames: Set<string>;
   collectionInfo: CollectionSourceInfo;
   helpers: LoopHelpers<Context>;
@@ -131,6 +133,7 @@ function processCollectionRenderingCall<Context>(
       collectionInfo,
       itemParamNames,
       indexExpression,
+      callbackArgPath,
       helpers,
     );
   }
@@ -328,6 +331,24 @@ function getIndexParamExpression(
   return null;
 }
 
+function getIndexParamName(
+  callbackPath: NodePath<ArrowFunctionExpression | FunctionExpression>,
+): string | null {
+  if (callbackPath.node.params.length < 2) return null;
+  const indexParam = callbackPath.node.params[1];
+  if (!indexParam) return null;
+
+  if (t.isIdentifier(indexParam)) {
+    return indexParam.name;
+  }
+
+  if (t.isAssignmentPattern(indexParam) && t.isIdentifier(indexParam.left)) {
+    return indexParam.left.name;
+  }
+
+  return null;
+}
+
 function processLoopElement<Context>(
   elementPath: NodePath<JSXElement>,
   filename: string,
@@ -335,6 +356,7 @@ function processLoopElement<Context>(
   collectionInfo: CollectionSourceInfo,
   itemParamNames: Set<string>,
   indexExpression: Expression | null,
+  callbackArgPath: NodePath<ArrowFunctionExpression | FunctionExpression>,
   helpers: LoopHelpers<Context>,
 ): void {
   if (processedLoopElements.has(elementPath.node)) return;
@@ -354,6 +376,7 @@ function processLoopElement<Context>(
     indexExpression: indexExpression
       ? t.cloneNode(indexExpression, true)
       : null,
+    indexParamName: getIndexParamName(callbackArgPath),
     itemParamNames,
     collectionInfo,
     helpers,
@@ -447,10 +470,14 @@ function annotateDynamicChildrenForElement<Context>(
 
   if (!dynamicChildInfo) return;
 
+  const segments = loopContext.indexParamName 
+    ? buildLoopAccessorSegments(dynamicChildInfo.segments, loopContext.indexParamName)
+    : dynamicChildInfo.segments;
+
   const value = buildLocationAttributeValue({
     filename,
     elementPaths: loopContext.collectionInfo.elementPaths,
-    segments: dynamicChildInfo.segments,
+    segments,
     indexExpression: loopContext.indexExpression ?? undefined,
     baseName: loopContext.collectionInfo.sourceName,
   });
@@ -495,10 +522,14 @@ function annotateImgSource<Context>(
     if (!access) continue;
     if (!loopContext.itemParamNames.has(access.baseName)) continue;
 
+    const segments = loopContext.indexParamName 
+      ? buildLoopAccessorSegments(access.segments, loopContext.indexParamName)
+      : access.segments;
+
     const sourceValue = buildLocationAttributeValue({
       filename: loopContext.filename,
       elementPaths: collectionInfo.elementPaths,
-      segments: access.segments,
+      segments,
       indexExpression: indexExpression ?? undefined,
       baseName: collectionInfo.sourceName,
     });

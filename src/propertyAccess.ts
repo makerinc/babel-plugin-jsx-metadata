@@ -135,10 +135,34 @@ export function getPropertyAccessSegment(
   }
 
   if (t.isNumericLiteral(property)) {
-    return { kind: "index", index: property.value };
+    return { kind: "property", name: property.value.toString() };
   }
 
   return null;
+}
+
+export function buildAccessorString(
+  baseName: string,
+  segments: PropertyAccessSegment[],
+): string {
+  let result = baseName;
+  
+  for (const segment of segments) {
+    if (segment.kind === "property") {
+      // Check if the property name is a valid JavaScript identifier
+      if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(segment.name)) {
+        result += `.${segment.name}`;
+      } else {
+        // Use bracket notation for invalid identifiers
+        result += `["${segment.name}"]`;
+      }
+    } else {
+      // Array index access
+      result += `[${segment.index}]`;
+    }
+  }
+  
+  return result;
 }
 
 type LocationAttributeParams = {
@@ -146,6 +170,7 @@ type LocationAttributeParams = {
   elementPaths: NodePath<Expression | SpreadElement | null>[];
   segments: PropertyAccessSegment[];
   indexExpression?: Expression | null;
+  baseName?: string;
 };
 
 export function buildLocationAttributeValue({
@@ -153,9 +178,10 @@ export function buildLocationAttributeValue({
   elementPaths,
   segments,
   indexExpression = null,
+  baseName,
 }: LocationAttributeParams): AttributeValue | null {
   const locations = elementPaths.map((elementPath) =>
-    getLocationForSegments(filename, elementPath, segments),
+    getLocationForSegments(filename, elementPath, segments, baseName),
   );
 
   const availableLocations = locations.filter(
@@ -192,6 +218,7 @@ function getLocationForSegments(
   filename: string,
   elementPath: NodePath<Expression | SpreadElement | null>,
   segments: PropertyAccessSegment[],
+  baseName?: string,
 ): string | null {
   if (!elementPath.node) return null;
   if (elementPath.isSpreadElement()) return null;
@@ -209,6 +236,10 @@ function getLocationForSegments(
           break;
         }
         if (t.isStringLiteral(prop.key) && prop.key.value === segment.name) {
+          matchedProperty = prop;
+          break;
+        }
+        if (t.isNumericLiteral(prop.key) && prop.key.value.toString() === segment.name) {
           matchedProperty = prop;
           break;
         }
@@ -231,18 +262,35 @@ function getLocationForSegments(
   const loc = currentNode?.loc ?? elementPath.node.loc;
   if (!loc) return null;
 
-  return formatLocation(filename, loc);
+  return formatLocation(filename, loc, baseName, segments);
 }
 
-function formatLocation(filename: string, loc: t.SourceLocation): string {
+function formatLocation(
+  filename: string, 
+  loc: t.SourceLocation,
+  baseName?: string,
+  segments?: PropertyAccessSegment[]
+): string {
   const startLine = loc.start.line;
   const startColumn = loc.start.column + 1;
   const endLine = loc.end.line;
   const endColumn = loc.end.column + 1;
-  const locationDescriptor = {
+  
+  const locationDescriptor: {
+    file: string;
+    start: string;
+    end: string;
+    id?: string;
+  } = {
     file: filename,
     start: `${startLine}:${startColumn}`,
     end: `${endLine}:${endColumn}`,
-  } as const;
+  };
+  
+  // Add JavaScript accessor-like ID if baseName and segments are provided
+  if (baseName && segments) {
+    locationDescriptor.id = buildAccessorString(baseName, segments);
+  }
+  
   return JSON.stringify(locationDescriptor);
 }

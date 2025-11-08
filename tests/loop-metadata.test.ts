@@ -44,13 +44,13 @@ describe("Loop metadata generation", () => {
 
     expect(output).toMatch(/data-editor-id="[a-f0-9]{12}"/);
     expect(output).toMatch(
-      /<span[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*\[[^\]]*\{\\"file\\":\\"Example-static\.jsx\\",\\"start\\":\\"\d+:\d+\\",\\"end\\":\\"\d+:\d+\\"\}[^\]]*\]\s*\[index\]\s*\}/,
+      /<span[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*\[[^\]]*\{\\"file\\":\\"Example-static\.jsx\\",\\"start\\":\\"\d+:\d+\\",\\"end\\":\\"\d+:\d+\\",\\"id\\":\\"[^"]+\\"\}[^\]]*\]\s*\[index\]\s*\}/,
     );
     expect(output).toMatch(
-      /<p[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*\[[^\]]*\{\\"file\\":\\"Example-static\.jsx\\",\\"start\\":\\"\d+:\d+\\",\\"end\\":\\"\d+:\d+\\"\}[^\]]*\]\s*\[index\]\s*\}/,
+      /<p[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-children-source=\{\s*\[[^\]]*\{\\"file\\":\\"Example-static\.jsx\\",\\"start\\":\\"\d+:\d+\\",\\"end\\":\\"\d+:\d+\\",\\"id\\":\\"[^"]+\\"\}[^\]]*\]\s*\[index\]\s*\}/,
     );
     expect(output).toMatch(
-      /<img[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-img-source=\{\s*\[[^\]]*\{\\"file\\":\\"Example-static\.jsx\\",\\"start\\":\\"\d+:\d+\\",\\"end\\":\\"\d+:\d+\\"\}[^\]]*\]\s*\[index\]\s*\}/,
+      /<img[^>]*data-editor-id="[a-f0-9]{12}"[^>]*data-img-source=\{\s*\[[^\]]*\{\\"file\\":\\"Example-static\.jsx\\",\\"start\\":\\"\d+:\d+\\",\\"end\\":\\"\d+:\d+\\",\\"id\\":\\"[^"]+\\"\}[^\]]*\]\s*\[index\]\s*\}/,
     );
     expect(output).not.toMatch(
       /<div key=\{index\}[^>]*data-children-source=/,

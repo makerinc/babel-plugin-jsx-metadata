@@ -452,6 +452,7 @@ function annotateDynamicChildrenForElement<Context>(
     elementPaths: loopContext.collectionInfo.elementPaths,
     segments: dynamicChildInfo.segments,
     indexExpression: loopContext.indexExpression ?? undefined,
+    baseName: loopContext.collectionInfo.sourceName,
   });
 
   if (value) {
@@ -499,6 +500,7 @@ function annotateImgSource<Context>(
       elementPaths: collectionInfo.elementPaths,
       segments: access.segments,
       indexExpression: indexExpression ?? undefined,
+      baseName: collectionInfo.sourceName,
     });
 
     if (sourceValue) {

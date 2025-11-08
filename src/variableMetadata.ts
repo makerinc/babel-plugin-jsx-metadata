@@ -84,6 +84,7 @@ function annotateChildrenSource<Context>(
       filename,
       elementPaths,
       segments: access.segments,
+      baseName: access.baseName,
     });
 
     if (!value) continue;
@@ -136,6 +137,7 @@ function annotateImgSource<Context>(
       filename,
       elementPaths,
       segments: access.segments,
+      baseName: access.baseName,
     });
 
     if (!sourceValue) continue;

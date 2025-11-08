@@ -54,6 +54,9 @@ describe("Variable metadata generation", () => {
     expect(output).toMatch(
       /data-img-source="\{\\"file\\":\\"Example-variable\.jsx\\"/,
     );
+    // Check that accessor IDs are included
+    expect(output).toContain('\\"id\\":\\"heroContent.title\\"');
+    expect(output).toContain('\\"id\\":\\"heroContent.image\\"');
   });
 
   test("skips variable metadata when source is dynamic", () => {
@@ -72,5 +75,9 @@ describe("Variable metadata generation", () => {
     expect(output).toMatch(
       /data-children-source="\{\\"file\\":\\"Example-simple\.jsx\\"/,
     );
+    // Check that simple variable accessor IDs are included
+    expect(output).toContain('\\"id\\":\\"myVar\\"');
+    expect(output).toContain('\\"id\\":\\"myConst\\"');
+    expect(output).toContain('\\"id\\":\\"myLet\\"');
   });
 });

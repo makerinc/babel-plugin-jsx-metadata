@@ -84,8 +84,8 @@ describe("Accessor ID generation", () => {
     const output = transform(complexAccessorComponent, "TestComponent.jsx");
 
     // Check that loop variable access includes collection source
-    expect(output).toContain('\\"id\\":\\"items[index].title\\"');
-    expect(output).toContain('\\"id\\":\\"items[index].price\\"');
+    expect(output).toContain('\\"id\\":\\"items[0].title\\"');
+    expect(output).toContain('\\"id\\":\\"items[0].price\\"');
     
     // Also verify main data structure access still works
     expect(output).toContain('\\"id\\":\\"data.user.profile.name\\"');

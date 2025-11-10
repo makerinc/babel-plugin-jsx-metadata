@@ -189,6 +189,7 @@ type LocationAttributeParams = {
   segments: PropertyAccessSegment[];
   indexExpression?: Expression | null;
   baseName?: string;
+  useElementIndexForIds?: boolean;
 };
 
 export function buildLocationAttributeValue({
@@ -197,9 +198,16 @@ export function buildLocationAttributeValue({
   segments,
   indexExpression = null,
   baseName,
+  useElementIndexForIds = false,
 }: LocationAttributeParams): AttributeValue | null {
-  const locations = elementPaths.map((elementPath) =>
-    getLocationForSegments(filename, elementPath, segments, baseName),
+  const locations = elementPaths.map((elementPath, elementIndex) =>
+    getLocationForSegments(
+      filename,
+      elementPath,
+      segments,
+      baseName,
+      useElementIndexForIds ? elementIndex : undefined,
+    ),
   );
 
   const availableLocations = locations.filter(
@@ -237,6 +245,7 @@ function getLocationForSegments(
   elementPath: NodePath<Expression | SpreadElement | null>,
   segments: PropertyAccessSegment[],
   baseName?: string,
+  elementIndex?: number,
 ): string | null {
   if (!elementPath.node) return null;
   if (elementPath.isSpreadElement()) return null;
@@ -285,14 +294,15 @@ function getLocationForSegments(
   const loc = currentNode?.loc ?? elementPath.node.loc;
   if (!loc) return null;
 
-  return formatLocation(filename, loc, baseName, segments);
+  return formatLocation(filename, loc, baseName, segments, elementIndex);
 }
 
 function formatLocation(
   filename: string, 
   loc: t.SourceLocation,
   baseName?: string,
-  segments?: PropertyAccessSegment[]
+  segments?: PropertyAccessSegment[],
+  elementIndex?: number,
 ): string {
   const startLine = loc.start.line;
   const startColumn = loc.start.column + 1;
@@ -312,8 +322,24 @@ function formatLocation(
   
   // Add JavaScript accessor-like ID if baseName and segments are provided
   if (baseName && segments) {
-    locationDescriptor.id = buildAccessorString(baseName, segments);
+    const idSegments =
+      elementIndex !== undefined
+        ? applyElementIndexToSegments(segments, elementIndex)
+        : segments;
+    locationDescriptor.id = buildAccessorString(baseName, idSegments);
   }
   
   return JSON.stringify(locationDescriptor);
+}
+
+function applyElementIndexToSegments(
+  segments: PropertyAccessSegment[],
+  elementIndex: number,
+): PropertyAccessSegment[] {
+  return segments.map((segment) => {
+    if (segment.kind === "variable_index") {
+      return { kind: "index", index: elementIndex };
+    }
+    return segment;
+  });
 }

@@ -275,13 +275,10 @@ function getLocationForSegments(
       if (!arrayElement || !t.isExpression(arrayElement)) return null;
       currentNode = arrayElement;
     } else if (segment.kind === "variable_index") {
-      // Variable index segments (like [i]) can't be resolved statically
-      // For static analysis, we skip these segments and use the array itself
-      // The accessor string will still include the variable index
-      if (!t.isArrayExpression(currentNode)) return null;
-      // Keep currentNode as the array itself since we can't resolve [variable] statically
-      // This means we'll get the source location of the array declaration
-      break; // Stop processing further segments since we can't resolve variable indices
+      // Variable index segments (like [i]) are represented in the accessor,
+      // but for static location resolution we can skip them because
+      // elementPaths already point at the concrete array elements.
+      continue;
     }
   }
 

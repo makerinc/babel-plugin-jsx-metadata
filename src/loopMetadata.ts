@@ -470,8 +470,11 @@ function annotateDynamicChildrenForElement<Context>(
 
   if (!dynamicChildInfo) return;
 
-  const segments = loopContext.indexParamName 
-    ? buildLoopAccessorSegments(dynamicChildInfo.segments, loopContext.indexParamName)
+  const segments = loopContext.indexParamName
+    ? buildLoopAccessorSegments(
+        dynamicChildInfo.segments,
+        loopContext.indexParamName,
+      )
     : dynamicChildInfo.segments;
 
   const value = buildLocationAttributeValue({
@@ -550,6 +553,8 @@ function getDynamicChildInfo(
   itemParamNames: Set<string>,
 ): { segments: PropertyAccessSegment[] } | null {
   const childPaths = elementPath.get("children") as NodePath[];
+  let matchedSegments: PropertyAccessSegment[] | null = null;
+  let referenceCount = 0;
 
   for (const childPath of childPaths) {
     if (Array.isArray(childPath)) continue;
@@ -564,7 +569,15 @@ function getDynamicChildInfo(
     if (!access) continue;
     if (!itemParamNames.has(access.baseName)) continue;
 
-    return { segments: access.segments };
+    referenceCount += 1;
+    if (referenceCount > 1) {
+      return null;
+    }
+    matchedSegments = access.segments;
+  }
+
+  if (referenceCount === 1 && matchedSegments) {
+    return { segments: matchedSegments };
   }
 
   return null;

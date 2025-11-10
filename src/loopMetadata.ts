@@ -49,7 +49,7 @@ type LoopContext<Context> = {
   indexExpression: Expression | null;
   indexParamName: string | null;
   itemParamNames: Set<string>;
-  collectionInfo: CollectionSourceInfo;
+  collectionInfo: CollectionSourceInfo | null;
   helpers: LoopHelpers<Context>;
   filename: string;
   context: Context;
@@ -96,7 +96,6 @@ function processCollectionRenderingCall<Context>(
   if (!sourceObjectPath.isIdentifier()) return;
 
   const collectionInfo = resolveCollectionSourceInfo(sourceObjectPath);
-  if (!collectionInfo) return;
 
   const callbackArgPath = callPath.get("arguments")[0];
   if (
@@ -353,7 +352,7 @@ function processLoopElement<Context>(
   elementPath: NodePath<JSXElement>,
   filename: string,
   context: Context,
-  collectionInfo: CollectionSourceInfo,
+  collectionInfo: CollectionSourceInfo | null,
   itemParamNames: Set<string>,
   indexExpression: Expression | null,
   callbackArgPath: NodePath<ArrowFunctionExpression | FunctionExpression>,
@@ -459,9 +458,10 @@ function annotateDynamicChildrenForElement<Context>(
   elementPath: NodePath<JSXElement>,
   loopContext: LoopContext<Context>,
 ): void {
-  const { helpers, filename } = loopContext;
+  const { helpers, filename, collectionInfo } = loopContext;
 
   if (helpers.isReactComponent(elementPath.node)) return;
+  if (!collectionInfo) return;
 
   const dynamicChildInfo = getDynamicChildInfo(
     elementPath,
@@ -476,10 +476,10 @@ function annotateDynamicChildrenForElement<Context>(
 
   const value = buildLocationAttributeValue({
     filename,
-    elementPaths: loopContext.collectionInfo.elementPaths,
+    elementPaths: collectionInfo.elementPaths,
     segments,
     indexExpression: loopContext.indexExpression ?? undefined,
-    baseName: loopContext.collectionInfo.sourceName,
+    baseName: collectionInfo.sourceName,
   });
 
   if (value) {
@@ -496,6 +496,7 @@ function annotateImgSource<Context>(
   loopContext: LoopContext<Context>,
 ): void {
   const { collectionInfo, indexExpression, helpers } = loopContext;
+  if (!collectionInfo) return;
 
   const openingElement = elementPath.node.openingElement;
   if (!t.isJSXIdentifier(openingElement.name)) return;
